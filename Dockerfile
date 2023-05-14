@@ -12,7 +12,7 @@ COPY . .
 
 RUN go mod tidy
 
-RUN go build -o pikpak-bot
+RUN go build -o ab
 
 
 # Deploy the application binary into a lean image
@@ -20,6 +20,6 @@ FROM alpine:3.16
 
 WORKDIR /
 
-COPY --from=build-stage /app/pikpak-bot /pikpak-bot
+COPY --from=build-stage /app/ab /ab
 
-ENTRYPOINT ["/pikpak-bot"]
+ENTRYPOINT ["/ab"]

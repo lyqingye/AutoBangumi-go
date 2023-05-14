@@ -7,7 +7,11 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"pikpak-bot/bus"
+	"pikpak-bot/db"
 	"pikpak-bot/downloader"
+	"pikpak-bot/downloader/aria2"
+	"pikpak-bot/rss"
 	"pikpak-bot/utils"
 	"strings"
 	"time"
@@ -19,9 +23,10 @@ import (
 )
 
 const (
-	CmdDownload            = "dl"
-	CmdAria2Status         = "status"
-	CmdRestart             = "restart"
+	CmdDownload    = "dl"
+	CmdAria2Status = "status"
+	CmdRestart     = "restart"
+
 	CallBackTypeSelectFile = "cbsf"
 )
 
@@ -32,6 +37,12 @@ type TGDownloaderBotConfig struct {
 	PikpakPassword    string
 	DownloadDirectory string
 	TGBotToken        string
+	DBHome            string
+	// Qbittorrent config
+	QbEndpoint          string
+	QbUsername          string
+	QbPassword          string
+	QbDownloadDirectory string
 }
 
 func (cfg *TGDownloaderBotConfig) Validate() error {
@@ -50,6 +61,7 @@ type TGDownloaderBot struct {
 	dl     downloader.OnlineDownloader
 	cache  *utils.SimpleTTLCache
 	bot    *TGBot
+	rssMan *rss.RSSManager
 }
 
 func NewTGDownloaderBot(config *TGDownloaderBotConfig) (*TGDownloaderBot, error) {
@@ -64,7 +76,7 @@ func NewTGDownloaderBot(config *TGDownloaderBotConfig) (*TGDownloaderBot, error)
 	if err != nil {
 		return nil, err
 	}
-	aria2, err := downloader.NewAria2OnlineDownloader(config.DownloadDirectory, config.Aria2WsEndpoint, config.Aria2Secret)
+	aria2, err := aria2.NewAria2OnlineDownloader(config.DownloadDirectory, config.Aria2WsEndpoint, config.Aria2Secret)
 	if err != nil {
 		return nil, err
 	}
@@ -78,10 +90,24 @@ func NewTGDownloaderBot(config *TGDownloaderBotConfig) (*TGDownloaderBot, error)
 		return nil, err
 	}
 	downloaderBot.bot = tgBot
+
+	db, err := db.NewDB(config.DBHome)
+	if err != nil {
+		return nil, err
+	}
+	eb := bus.NewEventBus()
+	eb.Start()
+	rssMan, err := rss.NewRSSManager(eb, db, time.Minute*1)
+	if err != nil {
+		return nil, err
+	}
+	downloaderBot.rssMan = rssMan
+
 	return &downloaderBot, nil
 }
 
 func (d *TGDownloaderBot) Run() {
+	d.rssMan.Start()
 	d.bot.Run()
 }
 
@@ -252,7 +278,7 @@ func (d *TGDownloaderBot) execCmdDownload(bot *TGBot, chatId int64, args []strin
 
 		if finishedTask.Phase == pikpakgo.PhaseTypeComplete {
 		} else if finishedTask.Phase == pikpakgo.PhaseTypeError {
-			return errors.New(fmt.Sprintf("pikpak offline download error: %s", finishedTask.Message))
+			return fmt.Errorf("pikpak offline download error: %s", finishedTask.Message)
 		}
 		bot.sendMsgNoResult(chatId, fmt.Sprintf("pikpak offline Task: %s finished", finishedTask.ID))
 
@@ -331,7 +357,7 @@ func (d *TGDownloaderBot) execCmdDownload(bot *TGBot, chatId int64, args []strin
 		return err
 	}
 
-	return errors.New(fmt.Sprintf("unsupported resource: %s", url))
+	return fmt.Errorf("unsupported resource: %s", url)
 }
 
 type FileSelectCallBackData struct {

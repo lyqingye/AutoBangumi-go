@@ -24,4 +24,5 @@ type OnlineDownloader interface {
 	PauseTask(tid string) error
 	ResumeTask(tid string) error
 	ListTasks() ([]DownloadStatus, error)
+	AddTaskCompleteCallback(tid string, callback func(status DownloadStatus) bool)
 }

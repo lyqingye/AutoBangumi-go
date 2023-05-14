@@ -1,0 +1,42 @@
+package bot_test
+
+import (
+	"github.com/stretchr/testify/require"
+	"pikpak-bot/bot"
+	"testing"
+	"time"
+)
+
+func TestAutoBangumi_Start(t *testing.T) {
+	config := bot.AutoBangumiConfig{
+		QBEndpoint:      "http://localhost:8080",
+		QBUsername:      "admin",
+		QBPassword:      "adminadmin",
+		QBDownloadDir:   "",
+		DBDir:           "./db_cache",
+		RSSUpdatePeriod: time.Minute * 5,
+	}
+	autoBangumiBot, err := bot.NewAutoBangumi(&config)
+	require.NoError(t, err)
+	require.NotNil(t, autoBangumiBot)
+	err = autoBangumiBot.AddMikanRss("https://mikanani.me/RSS/Bangumi?bangumiId=3002")
+	require.NoError(t, err)
+	autoBangumiBot.Start()
+}
+
+func TestAutoBangumi_Start2(t *testing.T) {
+	config := bot.AutoBangumiConfig{
+		QBEndpoint:      "http://nas.lyqingye.com:8888",
+		QBUsername:      "admin",
+		QBPassword:      "adminadmin",
+		QBDownloadDir:   "",
+		DBDir:           "./db_cache",
+		RSSUpdatePeriod: time.Minute * 5,
+	}
+	autoBangumiBot, err := bot.NewAutoBangumi(&config)
+	require.NoError(t, err)
+	require.NotNil(t, autoBangumiBot)
+	err = autoBangumiBot.AddMikanRss("https://mikanani.me/RSS/Bangumi?bangumiId=3002")
+	require.NoError(t, err)
+	autoBangumiBot.Start()
+}

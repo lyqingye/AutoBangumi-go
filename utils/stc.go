@@ -21,7 +21,8 @@ func NewSimpleTTLCache(period time.Duration) *SimpleTTLCache {
 		lock:  sync.RWMutex{},
 	}
 	go func() {
-		for {
+		ticker := time.NewTicker(period)
+		for range ticker.C {
 			now := time.Now()
 			func() {
 				cache.lock.Lock()
@@ -32,7 +33,6 @@ func NewSimpleTTLCache(period time.Duration) *SimpleTTLCache {
 					}
 				}
 			}()
-			time.Sleep(period)
 		}
 	}()
 	return &cache
