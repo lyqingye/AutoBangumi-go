@@ -1,10 +1,11 @@
-package downloader
+package aria2
 
 import (
 	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
+	"pikpak-bot/downloader"
 	"strings"
 	"time"
 
@@ -14,7 +15,10 @@ import (
 )
 
 var (
-	ErrNoConn = errors.New("did not connect to the server")
+	ErrNoConn       = errors.New("did not connect to the server")
+	TaskTypeStopped = "stopped"
+	TaskTypeActive  = "actived"
+	TaskTypeWatting = "watting"
 )
 
 var Aria2DownloadOptions arigo.Options = arigo.Options{
@@ -58,9 +62,9 @@ func NewAria2OnlineDownloader(dir, jsonRpc string, secret string) (*Aria2OnlineD
 	}()
 
 	go func() {
-		for {
+		ticker := time.NewTicker(time.Second * 30)
+		for range ticker.C {
 			downloader.resumeStoppedTasks()
-			time.Sleep(30 * time.Second)
 		}
 	}()
 
@@ -81,13 +85,13 @@ func (a *Aria2OnlineDownloader) AddTask(url string, dir string, filename string)
 	return status.GID, nil
 }
 
-func (a *Aria2OnlineDownloader) QueryStatus(tid string) (DownloadStatus, error) {
+func (a *Aria2OnlineDownloader) QueryStatus(tid string) (downloader.DownloadStatus, error) {
 	if a.client == nil {
-		return DownloadStatus{}, ErrNoConn
+		return downloader.DownloadStatus{}, ErrNoConn
 	}
 	aria2Status, err := a.client.TellStatus(tid)
 	if err != nil {
-		return DownloadStatus{}, nil
+		return downloader.DownloadStatus{}, nil
 	}
 	return aria2StatusToStatus(aria2Status), nil
 }
@@ -113,7 +117,7 @@ func (a *Aria2OnlineDownloader) ResumeTask(tid string) error {
 	return a.client.Unpause(tid)
 }
 
-func (a *Aria2OnlineDownloader) ListTasks() ([]DownloadStatus, error) {
+func (a *Aria2OnlineDownloader) ListTasks() ([]downloader.DownloadStatus, error) {
 	if a.client == nil {
 		return nil, ErrNoConn
 	}
@@ -121,7 +125,7 @@ func (a *Aria2OnlineDownloader) ListTasks() ([]DownloadStatus, error) {
 	if err != nil {
 		return nil, err
 	}
-	var result []DownloadStatus
+	var result []downloader.DownloadStatus
 	for _, s := range statusList {
 		result = append(result, aria2StatusToStatus(s))
 	}
@@ -129,51 +133,75 @@ func (a *Aria2OnlineDownloader) ListTasks() ([]DownloadStatus, error) {
 }
 
 func (a *Aria2OnlineDownloader) resumeStoppedTasks() {
+	a.walkTasks(TaskTypeStopped, func(cli *arigo.Client, as arigo.Status) bool {
+		var err error
+		switch as.Status {
+		case arigo.StatusPaused:
+			err = cli.Unpause(as.GID)
+			if err != nil {
+				log.Error().Err(err).Str("GID", as.GID).Msg("failed to Unpause task")
+			}
+			log.Info().Str("GID", as.GID).Msg("resume paused task")
+		case arigo.StatusError:
+			err = cli.RemoveDownloadResult(as.GID)
+			if err == nil {
+				// retry
+				for _, f := range as.Files {
+					var urls []string
+					for _, uri := range f.URIs {
+						urls = append(urls, uri.URI)
+					}
+					fileName := filepath.Base(f.Path)
+					opts := Aria2DownloadOptions
+					opts.Out = fileName
+					opts.Dir = filepath.Dir(f.Path)
+					_, err = a.client.AddURI(urls, &opts)
+					if err != nil {
+						log.Error().Err(err).Str("file", fileName).Msg("failed to retry download file")
+					} else {
+						log.Info().Str("file", fileName).Msg("retry download file")
+					}
+				}
+			} else {
+				log.Error().Err(err).Str("GID", as.GID).Msg("failed to remove error task")
+			}
+		}
+		return false
+	})
+}
+
+func (a *Aria2OnlineDownloader) walkTasks(taskType string, callback func(cli *arigo.Client, status arigo.Status) bool) {
 	offset := 0
 	var limit uint = 100
+	var err error
 	for {
 		cli := a.client
 		if cli != nil {
-			log.Info().Int("offset", offset).Msg("scan stopped tasks")
-			aria2Status, err := cli.TellStopped(offset, limit, []string{}...)
+			var aria2Status []arigo.Status
+			switch taskType {
+			case TaskTypeActive:
+				aria2Status, err = cli.TellActive([]string{}...)
+			case TaskTypeWatting:
+				aria2Status, err = cli.TellWaiting(offset, limit, []string{}...)
+			case TaskTypeStopped:
+				aria2Status, err = cli.TellStopped(offset, limit, []string{}...)
+			}
 			if err == nil {
 				for _, as := range aria2Status {
-					switch as.Status {
-					case arigo.StatusPaused:
-						err = cli.Unpause(as.GID)
-						if err != nil {
-							log.Error().Err(err).Str("GID", as.GID).Msg("failed to Unpause task")
-						}
-						log.Info().Str("GID", as.GID).Msg("resume paused task")
-					case arigo.StatusError:
-						err = cli.RemoveDownloadResult(as.GID)
-						if err == nil {
-							// retry
-							for _, f := range as.Files {
-								var urls []string
-								for _, uri := range f.URIs {
-									urls = append(urls, uri.URI)
-								}
-								fileName := filepath.Base(f.Path)
-								opts := Aria2DownloadOptions
-								opts.Out = fileName
-								opts.Dir = as.Dir
-								_, err = a.client.AddURI(urls, &opts)
-								if err != nil {
-									log.Error().Err(err).Str("file", fileName).Msg("failed to retry download file")
-								} else {
-									log.Info().Str("file", fileName).Msg("retry download file")
-								}
-							}
-						} else {
-							log.Error().Err(err).Str("GID", as.GID).Msg("failed to remove error task")
-						}
+					if callback(cli, as) {
+						return
 					}
 				}
-				if len(aria2Status) < int(limit) {
+
+				switch taskType {
+				case TaskTypeActive:
 					return
+				case TaskTypeWatting, TaskTypeStopped:
+					if len(aria2Status) < int(limit) {
+						return
+					}
+					offset = offset + len(aria2Status)
 				}
-				offset = offset + len(aria2Status)
 			} else {
 				log.Error().Err(err).Msg("tell stopped failed")
 				time.Sleep(5 * time.Second)
@@ -181,10 +209,29 @@ func (a *Aria2OnlineDownloader) resumeStoppedTasks() {
 			}
 		}
 	}
+
 }
 
-func aria2StatusToStatus(aria2Status arigo.Status) DownloadStatus {
-	status := DownloadStatus{}
+func (a *Aria2OnlineDownloader) AddTaskCompleteCallback(tid string, callback func(status downloader.DownloadStatus) bool) {
+	go func() {
+		ticker := time.NewTicker(time.Second * 30)
+		for range ticker.C {
+			cli := a.client
+			status, err := cli.TellStatus(tid, []string{}...)
+			if err == nil {
+				switch status.Status {
+				case arigo.StatusCompleted:
+					if callback(aria2StatusToStatus(status)) {
+						return
+					}
+				}
+			}
+		}
+	}()
+}
+
+func aria2StatusToStatus(aria2Status arigo.Status) downloader.DownloadStatus {
+	status := downloader.DownloadStatus{}
 	// speed
 	speed := humanize.Bytes(uint64(aria2Status.DownloadSpeed))
 	status.Speed = fmt.Sprintf("%s/s", speed)
@@ -204,18 +251,18 @@ func aria2StatusToStatus(aria2Status arigo.Status) DownloadStatus {
 	// status
 	switch aria2Status.Status {
 	case arigo.StatusActive:
-		status.Status = StatusDownloading
+		status.Status = downloader.StatusDownloading
 	case arigo.StatusCompleted:
-		status.Status = StatusFinished
+		status.Status = downloader.StatusFinished
 	case arigo.StatusError:
-		status.Status = StatusError
+		status.Status = downloader.StatusError
 		status.ErrMessage = aria2Status.ErrorMessage
 	case arigo.StatusPaused:
-		status.Status = StatusPause
+		status.Status = downloader.StatusPause
 	case arigo.StatusWaiting:
-		status.Status = StatusWaiting
+		status.Status = downloader.StatusWaiting
 	case arigo.StatusRemoved:
-		status.Status = StatusRemoved
+		status.Status = downloader.StatusRemoved
 	}
 
 	return status
