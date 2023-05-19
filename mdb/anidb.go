@@ -5,13 +5,15 @@ import (
 	"compress/gzip"
 	"encoding/xml"
 	"errors"
-	"github.com/go-resty/resty/v2"
 	"io"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/go-resty/resty/v2"
 )
 
 type AnimeTitles struct {
@@ -234,6 +236,13 @@ func (ani *AniDBClient) GetAnime(aniId string) (*Anime, error) {
 
 func (ani *AniDBClient) InitDumpData() error {
 	return ani.refreshDumpData(false)
+}
+
+func (ani *AniDBClient) AutoRefreshDumpData() {
+	ticker := time.NewTicker(time.Hour * 24)
+	for range ticker.C {
+		_ = ani.refreshDumpData(true)
+	}
 }
 
 func (ani *AniDBClient) refreshDumpData(forced bool) error {

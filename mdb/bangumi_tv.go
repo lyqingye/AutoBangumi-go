@@ -40,7 +40,6 @@ type Subjects struct {
 	Locked  bool  `json:"locked"`
 	Nsfw    bool  `json:"nsfw"`
 	Type    int   `json:"type"`
-	// InfoBox  []map[string][]string `json:"infobox2"`
 	InfoBox []any `json:"infobox"`
 }
 
