@@ -9,7 +9,6 @@ func GetBotCommands() *cobra.Command {
 		Use:   "bot",
 		Short: "bot commands",
 	}
-	rootCmd.AddCommand(GetRunDLBotCmd())
 	rootCmd.AddCommand(GetRunAutoBangumiBotCmd())
 	return &rootCmd
 }
