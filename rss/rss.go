@@ -4,9 +4,11 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	tmdb "github.com/cyruzin/golang-tmdb"
 	bangumitypes "pikpak-bot/bangumi"
 	"pikpak-bot/bus"
 	"pikpak-bot/db"
+	"pikpak-bot/mdb"
 	"pikpak-bot/utils"
 	"sync"
 	"time"
@@ -50,20 +52,24 @@ type RSSInfo struct {
 // - (SubjectId,Season,Episode) -> Episode
 
 type RSSManager struct {
-	eb      *bus.EventBus
-	db      *db.DB
-	ticker  *time.Ticker
-	parsers []*MikanRSSParser
-	logger  zerolog.Logger
-	lock    sync.Mutex
+	eb              *bus.EventBus
+	db              *db.DB
+	ticker          *time.Ticker
+	parsers         []*MikanRSSParser
+	logger          zerolog.Logger
+	lock            sync.Mutex
+	tmdb            *tmdb.Client
+	bangumiTvClient *mdb.BangumiTVClient
 }
 
-func NewRSSManager(eb *bus.EventBus, db *db.DB, period time.Duration) (*RSSManager, error) {
+func NewRSSManager(eb *bus.EventBus, db *db.DB, period time.Duration, tmdbClient *tmdb.Client, bangumiTVClient *mdb.BangumiTVClient) (*RSSManager, error) {
 	man := RSSManager{
-		eb:     eb,
-		db:     db,
-		logger: utils.GetLogger("RSSManager"),
-		lock:   sync.Mutex{},
+		eb:              eb,
+		db:              db,
+		logger:          utils.GetLogger("RSSManager"),
+		lock:            sync.Mutex{},
+		tmdb:            tmdbClient,
+		bangumiTvClient: bangumiTVClient,
 	}
 	man.ticker = time.NewTicker(period)
 	err := man.initRSSLinkFromDB()
@@ -165,7 +171,7 @@ func (man *RSSManager) AddMikanRss(mikanRss string) error {
 			return nil
 		}
 	}
-	parser, err := NewMikanRSSParser(mikanRss, man.eb, man.db)
+	parser, err := NewMikanRSSParser(mikanRss, man.eb, man.db, man.tmdb, man.bangumiTvClient)
 	if err != nil {
 		return err
 	}

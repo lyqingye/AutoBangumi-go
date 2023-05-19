@@ -3,6 +3,7 @@ package rss_test
 import (
 	"os"
 	"pikpak-bot/db"
+	"pikpak-bot/mdb"
 	"pikpak-bot/rss"
 	"regexp"
 	"strings"
@@ -21,25 +22,11 @@ func TestParseMikanRss(t *testing.T) {
 		_ = db.Close()
 		_ = os.RemoveAll(dir)
 	}()
-
-	parser, err := rss.NewMikanRSSParser("https://mikanani.me/RSS/MyBangumi?token=yvx3o96Ud1u1Fy7A4y2Cfp4gasJrQJa8E9T4nfcfZPU%3d", nil,db)
+	tmdbClient, err := tmdb.Init("702225c8ca516a5be2f062988438bfda")
 	require.NoError(t, err)
-	rssInfo, err := parser.Parse()
+	bangumiTVClient, err := mdb.NewBangumiTVClient("https://api.bgm.tv/v0")
 	require.NoError(t, err)
-	require.NotNil(t, rssInfo)
-}
-
-func TestParseMikanRss2(t *testing.T) {
-	dir := "./parser_cache"
-	db, err := db.NewDB(dir)
-	require.NoError(t, err)
-	require.NotNil(t, db)
-
-	defer func() {
-		_ = db.Close()
-		_ = os.RemoveAll(dir)
-	}()
-	parser, err := rss.NewMikanRSSParser("https://mikanani.me/RSS/Bangumi?bangumiId=3001", nil,db)
+	parser, err := rss.NewMikanRSSParser("https://mikanani.me/RSS/MyBangumi?token=yvx3o96Ud1u1Fy7A4y2Cfp4gasJrQJa8E9T4nfcfZPU%3d", nil, db, tmdbClient, bangumiTVClient)
 	require.NoError(t, err)
 	rssInfo, err := parser.Parse()
 	require.NoError(t, err)

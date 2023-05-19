@@ -3,6 +3,7 @@ package rss
 import (
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"net/url"
 	bangumitypes "pikpak-bot/bangumi"
@@ -114,7 +115,7 @@ type MikanRSSParser struct {
 	bangumiTvClient *mdb.BangumiTVClient
 }
 
-func NewMikanRSSParser(rss string, eb *bus.EventBus, parseCacheDB *db.DB) (*MikanRSSParser, error) {
+func NewMikanRSSParser(rss string, eb *bus.EventBus, parseCacheDB *db.DB, tmdbClient *tmdb.Client, bangumiTVClient *mdb.BangumiTVClient) (*MikanRSSParser, error) {
 	uri, err := url.Parse(rss)
 	if err != nil {
 		return nil, err
@@ -124,14 +125,6 @@ func NewMikanRSSParser(rss string, eb *bus.EventBus, parseCacheDB *db.DB) (*Mika
 		return nil, err
 	}
 	endpoint.Scheme = uri.Scheme
-	tmdbClient, err := tmdb.Init("702225c8ca516a5be2f062988438bfda")
-	if err != nil {
-		return nil, err
-	}
-	bangumiTVClient, err := mdb.NewBangumiTVClient("https://api.bgm.tv/v0")
-	if err != nil {
-		return nil, err
-	}
 	parser := MikanRSSParser{
 		logger:          utils.GetLogger("mikanRSS"),
 		mikanEndpoint:   endpoint,
@@ -256,33 +249,30 @@ func (parser *MikanRSSParser) Parse() (*RSSInfo, error) {
 				}
 
 				// try search tmdb
-			ExitSearchTMDB:
-				for _, langOptions := range []map[string]string{TMDBZHLangOptions, TMDBJPLangOptions, TMDBENLangOptions} {
-					for _, searchTitle := range searchTitles {
-						if searchTitle == "" {
-							continue
+				for _, searchTitle := range searchTitles {
+					if searchTitle == "" {
+						continue
+					}
+					tvDetails, err := parser.searchTMDB(searchTitle)
+					if err == nil {
+						bangumi.TmDBId = tvDetails.ID
+						bangumi.Title = tvDetails.Name
+						episode.BangumiTitle = bangumi.Title
+						// predict season number using air date
+						var times []time.Time
+						for _, season := range tvDetails.Seasons {
+							seasonAriDate, err := utils.ParseDate(season.AirDate)
+							if err != nil {
+								return nil, err
+							}
+							times = append(times, seasonAriDate)
 						}
-						tvDetails, err := parser.searchTMDB(searchTitle, langOptions)
-						if err == nil {
-							bangumi.TmDBId = tvDetails.ID
-							bangumi.Title = tvDetails.Name
-							episode.BangumiTitle = bangumi.Title
-							// predict season number using air date
-							var times []time.Time
-							for _, season := range tvDetails.Seasons {
-								seasonAriDate, err := utils.ParseDate(season.AirDate)
-								if err != nil {
-									return nil, err
-								}
-								times = append(times, seasonAriDate)
-							}
-							index := utils.FindCloseTime(times, subjectAirDate)
-							if index >= 0 && index < len(times) {
-								bangumi.Season = uint(tvDetails.Seasons[index].SeasonNumber)
-							}
-							if bangumi.Season != 0 {
-								break ExitSearchTMDB
-							}
+						index := utils.FindCloseTime(times, subjectAirDate)
+						if index >= 0 && index < len(times) {
+							bangumi.Season = uint(tvDetails.Seasons[index].SeasonNumber)
+						}
+						if bangumi.Season != 0 {
+							break
 						}
 					}
 				}
@@ -472,20 +462,22 @@ func (parser *MikanRSSParser) searchBangumiTV(keyword string) (*mdb.Subjects, er
 	}
 }
 
-func (parser *MikanRSSParser) searchTMDB(keyword string, opts map[string]string) (*tmdb.TVDetails, error) {
+func (parser *MikanRSSParser) searchTMDB(keyword string) (*tmdb.TVDetails, error) {
 	cachedTV := tmdb.TVDetails{}
 	key := getTMDBCacheByKeyword(keyword)
 	cached, err := parser.db.Get(key, &cachedTV)
 	if err != nil || !cached {
 		keyword = normalizationSearchTitle(keyword)
-		searchResult, err := parser.tmdb.GetSearchTVShow(keyword, opts)
-		if err == nil && len(searchResult.Results) > 0 {
-			tvDetails, err := parser.tmdb.GetTVDetails(int(searchResult.Results[0].ID), opts)
-			if err == nil {
-				return tvDetails, parser.db.Set(key, tvDetails)
+		for _, opts := range []map[string]string{TMDBZHLangOptions, TMDBJPLangOptions, TMDBENLangOptions} {
+			searchResult, err := parser.tmdb.GetSearchTVShow(keyword, opts)
+			if err == nil && len(searchResult.Results) > 0 {
+				tvDetails, err := parser.tmdb.GetTVDetails(int(searchResult.Results[0].ID), opts)
+				if err == nil {
+					return tvDetails, parser.db.Set(key, tvDetails)
+				}
 			}
 		}
-		return nil, err
+		return nil, errors.New("tmdb search result empty")
 	} else {
 		return &cachedTV, nil
 	}

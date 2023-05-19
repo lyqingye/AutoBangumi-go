@@ -11,15 +11,25 @@ import (
 )
 
 const (
-	EnvQbEndpoint      = "ENV_QB_ENDPOINT"
-	EnvQbUsername      = "ENV_QB_USERNAME"
-	EnvQbPassword      = "ENV_QB_PASSWORD"
-	EnvRSSUpdatePeriod = "ENV_RSS_UPDATE_PERIOD"
+	EnvQbEndpoint           = "ENV_QB_ENDPOINT"
+	EnvQbUsername           = "ENV_QB_USERNAME"
+	EnvQbPassword           = "ENV_QB_PASSWORD"
+	EnvRSSUpdatePeriod      = "ENV_RSS_UPDATE_PERIOD"
+	EnvTgBotToken           = "ENV_TG_BOT_TOKEN"
+	EnvDownloadDir          = "ENV_DOWNLOAD_DIR"
+	EnvDbHome               = "ENV_DB_HOME"
+	EnvBangumiTVApiEndpoint = "ENV_BANGUMI_TV_API_ENDPOINT"
+	EnvTMDBToken            = "ENV_TMDB_TOKEN"
 
-	FlagQbEndpoint      = "qb-endpoint"
-	FlagQbUsername      = "qb-username"
-	FlagQbPassword      = "qb-password"
-	FlagRssUpdatePeriod = "rss-update-period"
+	FlagQbEndpoint           = "qb-endpoint"
+	FlagQbUsername           = "qb-username"
+	FlagQbPassword           = "qb-password"
+	FlagRssUpdatePeriod      = "rss-update-period"
+	FlagTGBotToken           = "tg-token"
+	FlagDownloadDir          = "dl-dir"
+	FlagDBHome               = "db-home"
+	FlagBangumiTVApiEndpoint = "bangumi-tv-api-endpoint"
+	FlagTMDBToken            = "tmdb-token"
 )
 
 func GetRunAutoBangumiBotCmd() *cobra.Command {
@@ -53,6 +63,8 @@ func GetRunAutoBangumiBotCmd() *cobra.Command {
 	cmd.Flags().String(FlagTGBotToken, "", "telegram bot token")
 	cmd.Flags().String(FlagDownloadDir, "/downloads", "download directory path")
 	cmd.Flags().String(FlagDBHome, "/cache", "db home directory")
+	cmd.Flags().String(FlagBangumiTVApiEndpoint, "https://api.bgm.tv/v0", "bangumi tv api endpoint")
+	cmd.Flags().String(FlagTMDBToken, "", "tmdb token")
 	return &cmd
 }
 
@@ -64,6 +76,8 @@ func loadABBotConfigFromEnv() (*bot.TGAutoBangumiBotConfig, error) {
 	config.TGBotToken = os.Getenv(EnvTgBotToken)
 	config.QBDownloadDir = os.Getenv(EnvDownloadDir)
 	config.DBDir = os.Getenv(EnvDbHome)
+	config.TMDBToken = os.Getenv(EnvTMDBToken)
+	config.BangumiTVApiEndpoint = os.Getenv(EnvBangumiTVApiEndpoint)
 	rssUpdatePeriod := os.Getenv(EnvRSSUpdatePeriod)
 	period, err := strconv.ParseInt(rssUpdatePeriod, 10, 64)
 	if err != nil {
@@ -94,6 +108,12 @@ func loadABBotConfigFromCmdFlags(flags *pflag.FlagSet) (*bot.TGAutoBangumiBotCon
 		return nil, err
 	}
 	if config.QBDownloadDir, err = flags.GetString(FlagDownloadDir); err != nil {
+		return nil, err
+	}
+	if config.BangumiTVApiEndpoint, err = flags.GetString(FlagBangumiTVApiEndpoint); err != nil {
+		return nil, err
+	}
+	if config.TMDBToken, err = flags.GetString(FlagTMDBToken); err != nil {
 		return nil, err
 	}
 	if config.DBDir, err = flags.GetString(FlagDBHome); err != nil {

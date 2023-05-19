@@ -2,11 +2,13 @@ package bot
 
 import (
 	"errors"
+	tmdb "github.com/cyruzin/golang-tmdb"
 	"net/url"
 	"pikpak-bot/bangumi"
 	"pikpak-bot/bus"
 	"pikpak-bot/db"
 	"pikpak-bot/downloader/qibittorrent"
+	"pikpak-bot/mdb"
 	"pikpak-bot/rss"
 	"pikpak-bot/utils"
 	"time"
@@ -15,12 +17,14 @@ import (
 )
 
 type AutoBangumiConfig struct {
-	QBEndpoint      string
-	QBUsername      string
-	QBPassword      string
-	QBDownloadDir   string
-	DBDir           string
-	RSSUpdatePeriod time.Duration
+	QBEndpoint           string
+	QBUsername           string
+	QBPassword           string
+	QBDownloadDir        string
+	DBDir                string
+	BangumiTVApiEndpoint string
+	TMDBToken            string
+	RSSUpdatePeriod      time.Duration
 }
 
 func (config *AutoBangumiConfig) Validate() error {
@@ -30,6 +34,13 @@ func (config *AutoBangumiConfig) Validate() error {
 	}
 	if config.QBUsername == "" || config.QBPassword == "" {
 		return errors.New("empty qb username or password")
+	}
+
+	if config.BangumiTVApiEndpoint == "" {
+		config.BangumiTVApiEndpoint = "https://api.bgm.tv/v0"
+	}
+	if config.TMDBToken == "" {
+		return errors.New("tmdb token is empty")
 	}
 	return nil
 }
@@ -51,7 +62,15 @@ func NewAutoBangumi(config *AutoBangumiConfig) (*AutoBangumi, error) {
 	}
 	eb := bus.NewEventBus()
 	bot.eb = eb
-	rssMan, err := rss.NewRSSManager(eb, database, config.RSSUpdatePeriod)
+	bangumiTVClient, err := mdb.NewBangumiTVClient(config.BangumiTVApiEndpoint)
+	if err != nil {
+		return nil, err
+	}
+	tmdbClient, err := tmdb.Init(config.TMDBToken)
+	if err != nil {
+		return nil, err
+	}
+	rssMan, err := rss.NewRSSManager(eb, database, config.RSSUpdatePeriod, tmdbClient, bangumiTVClient)
 	if err != nil {
 		return nil, err
 	}
