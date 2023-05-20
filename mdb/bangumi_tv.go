@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/antlabs/strsim"
 	"github.com/go-resty/resty/v2"
 )
 
@@ -115,11 +116,10 @@ func (client *BangumiTVClient) SearchAnime(keyword string) (*Subjects, error) {
 	}
 	params.Filter.Type = append(params.Filter.Type, SubjectTypeAnime)
 	queryParams := map[string]string{
-		"limit":  "100",
+		"limit":  "10",
 		"offset": "0",
 	}
 	var pageResponse PageResponse
-	var subject Subjects
 	_, err := client.http.R().SetBody(params).SetQueryParams(queryParams).SetResult(&pageResponse).Post(apiUrl.String())
 	if err != nil {
 		return nil, err
@@ -127,23 +127,28 @@ func (client *BangumiTVClient) SearchAnime(keyword string) (*Subjects, error) {
 	if pageResponse.Total == 0 {
 		return nil, fmt.Errorf("bangumi tv search result is empty")
 	}
-	matched := false
-	var firstSubject Subjects
-	for i, entity := range pageResponse.Data {
+	var subjects []Subjects
+	var names []string
+	for _, entity := range pageResponse.Data {
+		var subject Subjects
 		err = json.Unmarshal(entity, &subject)
 		if err != nil {
 			return nil, err
 		}
-		if i == 0 {
-			firstSubject = subject
-		}
 		if subject.NameCn == keyword || subject.Name == keyword {
-			matched = true
-			break
+			return client.GetSubjects(subject.ID)
+		}
+		subjects = append(subjects, subject)
+		names = append(names, subject.Name)
+		names = append(names, subject.NameCn)
+	}
+	matchResult := strsim.FindBestMatch(keyword, names)
+
+	for _, subject := range subjects {
+		if subject.NameCn == matchResult.Match.S || subject.Name == matchResult.Match.S {
+			return client.GetSubjects(subject.ID)
 		}
 	}
-	if !matched && len(pageResponse.Data) != 0 {
-		subject = firstSubject
-	}
-	return client.GetSubjects(subject.ID)
+
+	return client.GetSubjects(subjects[0].ID)
 }
