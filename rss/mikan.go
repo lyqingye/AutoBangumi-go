@@ -5,7 +5,6 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"math"
 	"net/url"
 	bangumitypes "pikpak-bot/bangumi"
 	"pikpak-bot/bus"
@@ -164,7 +163,7 @@ func (parser *MikanRSSParser) Parse() (*RSSInfo, error) {
 			if parser.isBlackItemLink(item.Link) {
 				continue
 			}
-			parser.logger.Debug().Str("title", item.Title).Msg(fmt.Sprintf("parse Episode %d/%d", i+1, len(mikan.Channel.Item)))
+			parser.logger.Debug().Str("link", item.Link).Str("title", item.Title).Msg(fmt.Sprintf("parse Episode %d/%d", i+1, len(mikan.Channel.Item)))
 			err := parser.parserItemLink(item, bangumiMap)
 			if err != nil {
 				parser.blackItemLink(item.Link)
@@ -293,32 +292,21 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 				bangumi.Title = tvDetails.Name
 				episode.BangumiTitle = bangumi.Title
 				// predict season number using air date
-				minDiff := time.Duration(math.MaxInt64)
-				closeIndex := -1
-				for i, season := range tvDetails.Seasons {
-					// skip special season
-					// FIXME:
-					if season.SeasonNumber == 0 {
-						continue
-					}
+				var times []time.Time
+				for _, season := range tvDetails.Seasons {
 					seasonAriDate, err := utils.ParseDate(season.AirDate)
 					if err != nil {
 						return err
 					}
-					diff := subjectAirDate.Sub(seasonAriDate).Abs()
-					if diff <= minDiff {
-						minDiff = diff
-						closeIndex = i
-					}
+					times = append(times, seasonAriDate)
 				}
-				if closeIndex != -1 {
-					bangumi.Season = uint(tvDetails.Seasons[closeIndex].SeasonNumber)
+				index := utils.FindCloseTime(times, subjectAirDate)
+				if index >= 0 && index < len(times) {
+					bangumi.Season = uint(tvDetails.Seasons[index].SeasonNumber)
 				}
 				if bangumi.Season != 0 {
 					break
 				}
-			} else {
-				parser.logger.Error().Err(err).Msg("search tmdb error")
 			}
 		}
 	}
@@ -530,10 +518,7 @@ func (parser *MikanRSSParser) searchTMDB(keyword string) (*tmdb.TVDetails, error
 		keyword = normalizationSearchTitle(keyword)
 		for _, opts := range []map[string]string{TMDBZHLangOptions, TMDBJPLangOptions, TMDBENLangOptions} {
 			searchResult, err := parser.tmdb.GetSearchTVShow(keyword, opts)
-			if err != nil {
-				return nil, err
-			}
-			if len(searchResult.Results) > 0 {
+			if err == nil && len(searchResult.Results) > 0 {
 				tvDetails, err := parser.tmdb.GetTVDetails(int(searchResult.Results[0].ID), opts)
 				if err == nil {
 					return tvDetails, parser.db.Set(key, tvDetails)
@@ -571,7 +556,7 @@ func filterBangumi(rssInfo *RSSInfo) {
 					result := ResolutionPriority[epI] > ResolutionPriority[epJ] || SubtitlePriority[langI] > SubtitlePriority[langJ]
 					if err1 == nil && err2 == nil {
 						result = result || iDate.Unix() > jDate.Unix()
-					} else {
+					}else {
 						println("")
 					}
 					return result
