@@ -3,7 +3,6 @@ package rss
 import (
 	"bytes"
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"math"
 	"net/url"
@@ -19,6 +18,7 @@ import (
 	"time"
 
 	torrent "github.com/anacrolix/torrent/metainfo"
+	"github.com/antlabs/strsim"
 
 	tmdb "github.com/cyruzin/golang-tmdb"
 
@@ -83,6 +83,7 @@ type ParseCache struct {
 	TMDBId    int64
 	SubjectId int64
 	Season    uint
+	EPCount   uint
 	Episode   bangumitypes.Episode
 }
 
@@ -151,13 +152,42 @@ func NewMikanRSSParser(rss string, eb *bus.EventBus, parseCacheDB *db.DB, tmdbCl
 	return &parser, nil
 }
 
+func (parser *MikanRSSParser) Search(keyword string) (*bangumitypes.Bangumi, error) {
+	resp, err := parser.http.R().SetQueryParam("searchstr", keyword).Get(parser.mikanEndpoint.JoinPath("RSS/Search").String())
+	if err != nil {
+		return nil, err
+	}
+	rssContent := MikanRss{}
+	err = xml.Unmarshal(resp.Body(), &rssContent)
+	if err != nil {
+		return nil, err
+	}
+	result, err := parser.parseMikanRSS(&rssContent)
+	if err != nil {
+		return nil, err
+	}
+	if len(result.Bangumis) == 0 {
+		return nil, fmt.Errorf("search bangumi empty: %s", keyword)
+	}
+	var names []string
+	for _, bgm := range result.Bangumis {
+		names = append(names, bgm.Title)
+	}
+	matchResult := strsim.FindBestMatch(keyword, names)
+	return &result.Bangumis[matchResult.BestIndex], nil
+}
+
 func (parser *MikanRSSParser) Parse() (*RSSInfo, error) {
 	var err error
-	rssInfo := RSSInfo{}
 	mikan, err := parser.getRss()
 	if err != nil {
 		return nil, err
 	}
+	return parser.parseMikanRSS(mikan)
+}
+
+func (parser *MikanRSSParser) parseMikanRSS(mikan *MikanRss) (*RSSInfo, error) {
+	rssInfo := RSSInfo{}
 	bangumiMap := make(map[int64]*bangumitypes.Bangumi)
 	for i, item := range mikan.Channel.Item {
 		if item.Link != "" {
@@ -242,6 +272,12 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 			episode.FileSize = fileSize
 		}
 		episode.Date = item.Torrent.PubDate
+		if episode.BangumiTitle == "" && parsedElements.AnimeTitle == "" {
+			return fmt.Errorf("unkown bangumi title link: %s", item.Link)
+		} else if episode.BangumiTitle == "" {
+			episode.BangumiTitle = strings.Split(parsedElements.AnimeTitle, "/")[0]
+		}
+
 		cache.Episode = episode
 	} else {
 		episode = cache.Episode
@@ -252,6 +288,7 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 		Season:    cache.Season,
 		TmDBId:    cache.TMDBId,
 		SubjectId: cache.SubjectId,
+		EPCount:   cache.EPCount,
 	}
 
 	// parse bangumi information using tmdb
@@ -271,9 +308,11 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 			cache.SubjectId = subject.ID
 
 			// cache mikan bangumiId -> BangumiTV Id
-			_ = parser.db.Set(getMikanBangumiToBangumiTVCache(episode.MikanBangumiId), &episode.SubjectId)
+			if episode.MikanBangumiId != "" {
+				_ = parser.db.Set(getMikanBangumiToBangumiTVCache(episode.MikanBangumiId), &episode.SubjectId)
+			}
 		}
-		bangumi.EPCount = uint(subject.Eps)
+
 		var searchTitles []string
 		searchTitles = append(searchTitles, episode.BangumiTitle, subject.NameCn, subject.Name)
 		searchTitles = append(searchTitles, subject.GetAliasNames()...)
@@ -313,12 +352,15 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 				}
 				if closeIndex != -1 {
 					bangumi.Season = uint(tvDetails.Seasons[closeIndex].SeasonNumber)
+					bangumi.EPCount = uint(tvDetails.Seasons[closeIndex].EpisodeCount)
+					cache.Season = bangumi.Season
+					cache.EPCount = bangumi.EPCount
 				}
 				if bangumi.Season != 0 {
 					break
 				}
 			} else {
-				parser.logger.Error().Err(err).Msg("search tmdb error")
+				parser.logger.Warn().Err(err).Msg("search tmdb error")
 			}
 		}
 	}
@@ -419,7 +461,10 @@ func (parser *MikanRSSParser) ParseEpisode(link string) (bangumitypes.Episode, e
 		ep.MikanBangumiId = strings.ReplaceAll(mikanBangumiLink, "/Home/Bangumi/", "")
 		key := getMikanBangumiToBangumiTVCache(ep.MikanBangumiId)
 		var cachedSubjectId int64
-		cached, err := parser.db.Get(key, &cachedSubjectId)
+		var cached bool
+		if ep.MikanBangumiId != "" {
+			cached, err = parser.db.Get(key, &cachedSubjectId)
+		}
 		if err == nil && cached {
 			ep.SubjectId = cachedSubjectId
 		} else {
@@ -540,7 +585,7 @@ func (parser *MikanRSSParser) searchTMDB(keyword string) (*tmdb.TVDetails, error
 				}
 			}
 		}
-		return nil, errors.New("tmdb search result empty")
+		return nil, fmt.Errorf("tmdb not found: %s", keyword)
 	} else {
 		return &cachedTV, nil
 	}
@@ -590,7 +635,7 @@ func normalizationResolution(resolution string) string {
 	switch resolution {
 	case "1080P", "1080p", "1920x1080", "1920X1080":
 		return bangumitypes.Resolution1080p
-	case "720P", "720p", "1024x720", "1024X720":
+	case "720P", "720p", "1024x720", "1280x720":
 		return bangumitypes.Resolution720p
 	default:
 		return bangumitypes.ResolutionUnknown
@@ -616,5 +661,5 @@ func normalizationSearchTitle(keyword string) string {
 		re := regexp.MustCompile(pattern)
 		keyword = strings.ReplaceAll(keyword, re.FindString(keyword), "")
 	}
-	return keyword
+	return strings.Split(keyword, " ")[0]
 }
