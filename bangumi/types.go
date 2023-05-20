@@ -20,6 +20,21 @@ const (
 	EpisodeTypeUnknown    = "unknown"
 )
 
+var (
+	ResolutionPriority = map[string]int{
+		Resolution2160p:   4,
+		Resolution1080p:   3,
+		Resolution720p:    2,
+		ResolutionUnknown: 1,
+	}
+
+	SubtitlePriority = map[string]int{
+		SubtitleChs:     3,
+		SubtitleCht:     2,
+		SubtitleUnknown: 1,
+	}
+)
+
 type Bangumi struct {
 	Title     string
 	EPCount   uint

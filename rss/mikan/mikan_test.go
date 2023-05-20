@@ -1,11 +1,11 @@
-package rss_test
+package mikan_test
 
 import (
 	"os"
 	"pikpak-bot/bus"
 	"pikpak-bot/db"
 	"pikpak-bot/mdb"
-	"pikpak-bot/rss"
+	"pikpak-bot/rss/mikan"
 	"regexp"
 	"strings"
 	"testing"
@@ -28,7 +28,7 @@ func TestParseMikanRss(t *testing.T) {
 	require.NoError(t, err)
 	eb := bus.NewEventBus()
 	eb.Start()
-	parser, err := rss.NewMikanRSSParser("https://mikanani.me/RSS/Bangumi?bangumiId=444", eb, db, tmdbClient, bangumiTVClient)
+	parser, err := mikan.NewMikanRSSParser("https://mikanani.me/RSS/Bangumi?bangumiId=444", eb, db, tmdbClient, bangumiTVClient)
 	require.NoError(t, err)
 	rssInfo, err := parser.Parse()
 	require.NoError(t, err)
@@ -50,7 +50,7 @@ func TestMikanSearch(t *testing.T) {
 	require.NoError(t, err)
 	eb := bus.NewEventBus()
 	eb.Start()
-	parser, err := rss.NewMikanRSSParser("https://mikanani.me/RSS/Bangumi?bangumiId=444", eb, db, tmdbClient, bangumiTVClient)
+	parser, err := mikan.NewMikanRSSParser("https://mikanani.me/RSS/Bangumi?bangumiId=444", eb, db, tmdbClient, bangumiTVClient)
 	require.NoError(t, err)
 	result, err := parser.Search("与山田谈一场Lv999的恋爱")
 	require.NoError(t, err)
