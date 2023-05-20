@@ -24,6 +24,7 @@ type Bangumi struct {
 type Episode struct {
 	BangumiTitle string
 	SubjectId    int64 // BangumiTV SubjectId
+	MikanBangumiId string
 	EpisodeTitle string
 	Subgroup     string
 	Season       uint

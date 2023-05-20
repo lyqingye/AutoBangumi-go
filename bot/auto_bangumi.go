@@ -2,7 +2,6 @@ package bot
 
 import (
 	"errors"
-	tmdb "github.com/cyruzin/golang-tmdb"
 	"net/url"
 	"pikpak-bot/bangumi"
 	"pikpak-bot/bus"
@@ -12,6 +11,8 @@ import (
 	"pikpak-bot/rss"
 	"pikpak-bot/utils"
 	"time"
+
+	tmdb "github.com/cyruzin/golang-tmdb"
 
 	"github.com/rs/zerolog"
 )
@@ -91,6 +92,7 @@ func NewAutoBangumi(config *AutoBangumiConfig) (*AutoBangumi, error) {
 }
 
 func (bot *AutoBangumi) Start() {
+	bot.logger.Info().Msg("starting auto bangumi bot")
 	go bot.qbAutoResumePausedTorrents()
 	bot.eb.Start()
 	bot.rssMan.Start()
@@ -153,34 +155,40 @@ func (bot *AutoBangumi) handleBangumiUpdate(episode *bangumi.Episode) error {
 			return err
 		}
 
-		// Wait for torrent parsing complete
-		for {
-			if torrentTask != nil && torrentTask.State == qibittorrent.StatePausedDL {
-				break
-			}
-			time.Sleep(time.Second)
-			torrentTask, _ = bot.qb.GetTorrent(episode.TorrentHash)
-		}
-
-		// renaming torrent files
-		err = bot.renameTorrent(hash, episode)
-		if err != nil {
-			return err
-		}
-
-		// resume
-		err = bot.qb.ResumeTorrents([]string{hash})
-		if err != nil {
-			return err
-		}
-
-		// wait for download complete
 		go func() {
-			bot.qb.WaitForDownloadComplete(hash, time.Second*5, func() bool {
-				bot.logger.Info().Str("title", episode.BangumiTitle).Uint("season", episode.Season).Uint("episode", episode.EPNumber).Msg("download complete")
-				return bot.rssMan.MarkEpisodeAsRead(episode) == nil
-			})
+			// Wait for torrent parsing complete
+			bot.logger.Info().Msg("wait for torrent parsing complete")
+			for {
+				if torrentTask != nil && torrentTask.State == qibittorrent.StatePausedDL {
+					break
+				}
+				time.Sleep(time.Second)
+				torrentTask, _ = bot.qb.GetTorrent(episode.TorrentHash)
+			}
+
+			// renaming torrent files
+			err = bot.renameTorrent(hash, episode)
+			if err != nil {
+				bot.logger.Error().Err(err).Msg("rename torrent files error")
+				return
+			}
+
+			// resume
+			err = bot.qb.ResumeTorrents([]string{hash})
+			if err != nil {
+				bot.logger.Error().Err(err).Msg("resume torrent error")
+				return
+			}
+
+			// wait for download complete
+			go func() {
+				bot.qb.WaitForDownloadComplete(hash, time.Second*5, func() bool {
+					bot.logger.Info().Str("title", episode.BangumiTitle).Uint("season", episode.Season).Uint("episode", episode.EPNumber).Msg("download complete")
+					return bot.rssMan.MarkEpisodeAsRead(episode) == nil
+				})
+			}()
 		}()
+
 	} else {
 		bot.logger.Warn().Str("title", episode.BangumiTitle).Uint("season", episode.Season).Uint("episode", episode.EPNumber).Msg("skip episode, torrent hash is empty")
 	}
@@ -194,6 +202,9 @@ func (bot *AutoBangumi) qbAutoResumePausedTorrents() {
 		if err == nil {
 			var hashes []string
 			for _, torrent := range torrents {
+				if torrent.State == qibittorrent.StateError {
+					continue
+				}
 				if torrent.CompletionOn == 0 {
 					hashes = append(hashes, torrent.Hash)
 				}

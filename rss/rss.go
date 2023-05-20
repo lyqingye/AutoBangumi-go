@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	tmdb "github.com/cyruzin/golang-tmdb"
 	bangumitypes "pikpak-bot/bangumi"
 	"pikpak-bot/bus"
 	"pikpak-bot/db"
@@ -12,6 +11,8 @@ import (
 	"pikpak-bot/utils"
 	"sync"
 	"time"
+
+	tmdb "github.com/cyruzin/golang-tmdb"
 
 	"github.com/rs/zerolog"
 )
@@ -89,23 +90,9 @@ func (man *RSSManager) initRSSLinkFromDB() error {
 		if err != nil {
 			return err
 		}
+		man.logger.Debug().Str("link", rss).Msg("load rss link")
 	}
 	return nil
-}
-
-func (man *RSSManager) rssLinkExists(rssLink string) bool {
-	rssLinks, err := man.ListRSSLink()
-	if err != nil {
-		return false
-	}
-	found := false
-	for _, rss := range rssLinks {
-		if rss == rssLink {
-			found = true
-			break
-		}
-	}
-	return found
 }
 
 func (man *RSSManager) saveRSSLinkToDB(newRssLink string) error {
@@ -159,6 +146,7 @@ func (man *RSSManager) ListRSSLink() ([]string, error) {
 }
 
 func (man *RSSManager) Start() {
+	man.logger.Info().Msg("start rss manager")
 	man.Refresh()
 	for range man.ticker.C {
 		man.Refresh()
@@ -177,7 +165,8 @@ func (man *RSSManager) AddMikanRss(mikanRss string) error {
 	}
 	man.parsers = append(man.parsers, parser)
 	err = man.saveRSSLinkToDB(mikanRss)
-	go man.Refresh()
+
+	go man.refreshParser(parser)
 	return err
 }
 
@@ -186,29 +175,35 @@ func (man *RSSManager) RemoveMikanRss(mikanRss string) error {
 }
 
 func (man *RSSManager) Refresh() {
+	man.logger.Debug().Msg("try refresh all rss")
 	man.lock.Lock()
+	man.logger.Debug().Msg("start refresh all rss")
 	defer man.lock.Unlock()
 	for _, parser := range man.parsers {
-		man.logger.Info().Str("rssLink", parser.rssLink).Msg("refresh RSS")
-		rssInfo, err := parser.Parse()
-		if err != nil {
-			man.logger.Error().Str("rssLink", parser.rssLink).Err(err).Msg("refresh RSS Failed")
-			continue
-		}
-		err = man.updateIndex(parser.rssLink, rssInfo)
-		if err != nil {
-			man.logger.Error().Str("rssLink", parser.rssLink).Err(err).Msg("Update index Failed")
-			return
-		}
-		for _, bangumi := range rssInfo.Bangumis {
-			for _, ep := range bangumi.Episodes {
-				if !man.alreadyRead(&ep) {
-					man.eb.Publish(bus.RSSTopic, bus.Event{
-						EventType: bus.RSSUpdateEventType,
-						Inner:     ep,
-					})
-					man.logger.Info().Str("bangumi", ep.BangumiTitle).Uint("season", ep.Season).Uint("ep", ep.EPNumber).Msg("rss update")
-				}
+		man.refreshParser(parser)
+	}
+}
+
+func (man *RSSManager) refreshParser(parser *MikanRSSParser) {
+	man.logger.Info().Str("rssLink", parser.rssLink).Msg("refresh RSS")
+	rssInfo, err := parser.Parse()
+	if err != nil {
+		man.logger.Error().Str("rssLink", parser.rssLink).Err(err).Msg("refresh RSS Failed")
+		return
+	}
+	err = man.updateIndex(parser.rssLink, rssInfo)
+	if err != nil {
+		man.logger.Error().Str("rssLink", parser.rssLink).Err(err).Msg("Update index Failed")
+		return
+	}
+	for _, bangumi := range rssInfo.Bangumis {
+		for _, ep := range bangumi.Episodes {
+			if !man.alreadyRead(&ep) {
+				man.eb.Publish(bus.RSSTopic, bus.Event{
+					EventType: bus.RSSUpdateEventType,
+					Inner:     ep,
+				})
+				man.logger.Info().Str("bangumi", ep.BangumiTitle).Uint("season", ep.Season).Uint("ep", ep.EPNumber).Msg("rss update")
 			}
 		}
 	}
