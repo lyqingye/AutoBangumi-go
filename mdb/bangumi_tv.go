@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/antlabs/strsim"
 	"github.com/go-resty/resty/v2"
 )
 
@@ -40,7 +41,6 @@ type Subjects struct {
 	Locked  bool  `json:"locked"`
 	Nsfw    bool  `json:"nsfw"`
 	Type    int   `json:"type"`
-	// InfoBox  []map[string][]string `json:"infobox2"`
 	InfoBox []any `json:"infobox"`
 }
 
@@ -116,11 +116,10 @@ func (client *BangumiTVClient) SearchAnime(keyword string) (*Subjects, error) {
 	}
 	params.Filter.Type = append(params.Filter.Type, SubjectTypeAnime)
 	queryParams := map[string]string{
-		"limit":  "1",
+		"limit":  "10",
 		"offset": "0",
 	}
 	var pageResponse PageResponse
-	var subject Subjects
 	_, err := client.http.R().SetBody(params).SetQueryParams(queryParams).SetResult(&pageResponse).Post(apiUrl.String())
 	if err != nil {
 		return nil, err
@@ -128,9 +127,28 @@ func (client *BangumiTVClient) SearchAnime(keyword string) (*Subjects, error) {
 	if pageResponse.Total == 0 {
 		return nil, fmt.Errorf("bangumi tv search result is empty")
 	}
-	err = json.Unmarshal(pageResponse.Data[0], &subject)
-	if err != nil {
-		return nil, err
+	var subjects []Subjects
+	var names []string
+	for _, entity := range pageResponse.Data {
+		var subject Subjects
+		err = json.Unmarshal(entity, &subject)
+		if err != nil {
+			return nil, err
+		}
+		if subject.NameCn == keyword || subject.Name == keyword {
+			return client.GetSubjects(subject.ID)
+		}
+		subjects = append(subjects, subject)
+		names = append(names, subject.Name)
+		names = append(names, subject.NameCn)
 	}
-	return client.GetSubjects(subject.ID)
+	matchResult := strsim.FindBestMatch(keyword, names)
+
+	for _, subject := range subjects {
+		if subject.NameCn == matchResult.Match.S || subject.Name == matchResult.Match.S {
+			return client.GetSubjects(subject.ID)
+		}
+	}
+
+	return client.GetSubjects(subjects[0].ID)
 }

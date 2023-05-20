@@ -7,7 +7,8 @@
             "request": "launch",
             "mode": "auto",
             "program": "${cwd}/main.go",
-            "args": ["bot", "run-ab-bot"]
+            "args": ["bot", "run-ab-bot"],
+            "envFile": "${cwd}/docker.env"
         }
     ]
 }

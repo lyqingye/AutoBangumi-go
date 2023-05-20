@@ -26,7 +26,6 @@ func NewTGBot(token string, listener TGBotListener) (*TGBot, error) {
 	if err != nil {
 		return nil, err
 	}
-	inner.Debug = true
 	bot.bot = inner
 	bot.sessions = utils.NewSimpleTTLCache(time.Second * 5)
 	return &bot, nil

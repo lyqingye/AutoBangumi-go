@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	CmdAddMikanSubcribeLink = "sub"
+	CmdAddMikanSubcribeLink = "rss_sub"
+	CmdRefreshSubcribe      = "rss_refresh"
 )
 
 type TGAutoBangumiBotConfig struct {
@@ -61,8 +62,11 @@ func (ab *TGAutoBangumiBot) onCommand(bot *TGBot, chatId int64, cmd string, args
 	switch cmd {
 	case CmdAddMikanSubcribeLink:
 		return ab.execCmdDownload(bot, chatId, args)
+	case CmdRefreshSubcribe:
+		go ab.autoBangumi.rssMan.Refresh()
+		return nil
 	default:
-		return errors.New("unknown cmd")
+		return fmt.Errorf("unknown cmd: %s", cmd)
 	}
 }
 
@@ -77,10 +81,10 @@ func (ab *TGAutoBangumiBot) execCmdDownload(bot *TGBot, chatId int64, args []str
 	}
 
 	if strings.HasPrefix(arg, "https://mikanani.me/RSS") {
-		err := ab.autoBangumi.AddMikanRss(arg)
-		if err != nil {
-			return err
-		}
+		// err := ab.autoBangumi.AddMikanRss(arg)
+		// if err != nil {
+		// 	return err
+		// }
 		bot.sendMsg(chatId, fmt.Sprintf("success subscribe mikan rss! link: %s", arg))
 		return nil
 	}
