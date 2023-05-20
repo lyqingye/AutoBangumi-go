@@ -29,18 +29,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-var (
-	TMDBJPLangOptions = map[string]string{
-		"language": "ja-JP",
-	}
-	TMDBZHLangOptions = map[string]string{
-		"language": "zh-CN",
-	}
-	TMDBENLangOptions = map[string]string{
-		"language": "en-US",
-	}
-)
-
 type MikanRssItem struct {
 	Guid struct {
 		IsPermaLink string `xml:"isPermaLink,attr"`
@@ -125,11 +113,11 @@ type MikanRSSParser struct {
 	eb              *bus.EventBus
 	db              *db.DB
 	logger          zerolog.Logger
-	tmdb            *tmdb.Client
+	tmdb            *mdb.TMDBClient
 	bangumiTvClient *mdb.BangumiTVClient
 }
 
-func NewMikanRSSParser(rss string, eb *bus.EventBus, parseCacheDB *db.DB, tmdbClient *tmdb.Client, bangumiTVClient *mdb.BangumiTVClient) (*MikanRSSParser, error) {
+func NewMikanRSSParser(rss string, eb *bus.EventBus, parseCacheDB *db.DB, tmdbClient *mdb.TMDBClient, bangumiTVClient *mdb.BangumiTVClient) (*MikanRSSParser, error) {
 	uri, err := url.Parse(rss)
 	if err != nil {
 		return nil, err
@@ -263,6 +251,12 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 				episode.Lang = append(episode.Lang, normalizationLang(l))
 			}
 		}
+		if len(parsedElements.AnimeType) == 0 {
+			episode.EpisodeType = bangumitypes.EpisodeTypeNone
+		} else {
+			episode.EpisodeType = normalizationEpisodeType(parsedElements.AnimeType[0])
+		}
+
 		if len(episode.Lang) == 0 {
 			episode.Lang = []string{bangumitypes.SubtitleUnknown}
 		}
@@ -573,19 +567,11 @@ func (parser *MikanRSSParser) searchTMDB(keyword string) (*tmdb.TVDetails, error
 	cached, err := parser.db.Get(key, &cachedTV)
 	if err != nil || !cached {
 		keyword = normalizationSearchTitle(keyword)
-		for _, opts := range []map[string]string{TMDBZHLangOptions, TMDBJPLangOptions, TMDBENLangOptions} {
-			searchResult, err := parser.tmdb.GetSearchTVShow(keyword, opts)
-			if err != nil {
-				return nil, err
-			}
-			if len(searchResult.Results) > 0 {
-				tvDetails, err := parser.tmdb.GetTVDetails(int(searchResult.Results[0].ID), opts)
-				if err == nil {
-					return tvDetails, parser.db.Set(key, tvDetails)
-				}
-			}
+		result, err := parser.tmdb.SearchTVShowByKeyword(keyword)
+		if err != nil {
+			return nil, err
 		}
-		return nil, fmt.Errorf("tmdb not found: %s", keyword)
+		return result, parser.db.Set(key, result)
 	} else {
 		return &cachedTV, nil
 	}
@@ -595,6 +581,12 @@ func filterBangumi(rssInfo *RSSInfo) {
 	for i, b := range rssInfo.Bangumis {
 		epMap := make(map[string][]bangumitypes.Episode)
 		for _, ep := range b.Episodes {
+			if ep.EPNumber > b.EPCount {
+				continue
+			}
+			if ep.EpisodeType != bangumitypes.EpisodeTypeNone {
+				continue
+			}
 			key := fmt.Sprintf("%d-%d", ep.Season, ep.EPNumber)
 			dupEps := epMap[key]
 			dupEps = append(dupEps, ep)
@@ -633,6 +625,8 @@ func filterBangumi(rssInfo *RSSInfo) {
 
 func normalizationResolution(resolution string) string {
 	switch resolution {
+	case "2160P", "2160p":
+		return bangumitypes.Resolution2160p
 	case "1080P", "1080p", "1920x1080", "1920X1080":
 		return bangumitypes.Resolution1080p
 	case "720P", "720p", "1024x720", "1280x720":
@@ -649,6 +643,16 @@ func normalizationLang(lang string) string {
 		}
 	}
 	return bangumitypes.SubtitleUnknown
+}
+
+func normalizationEpisodeType(epType string) string {
+	epType = strings.ToUpper(epType)
+	switch epType {
+	case bangumitypes.EpisodeTypeSP, bangumitypes.EpisodeTypeOVA, bangumitypes.EpisodeTypeSpecial:
+		return epType
+	default:
+		return bangumitypes.EpisodeTypeUnknown
+	}
 }
 
 func normalizationSearchTitle(keyword string) string {

@@ -12,8 +12,6 @@ import (
 	"sync"
 	"time"
 
-	tmdb "github.com/cyruzin/golang-tmdb"
-
 	"github.com/rs/zerolog"
 )
 
@@ -24,6 +22,7 @@ var (
 
 var (
 	ResolutionPriority = map[string]int{
+		bangumitypes.Resolution2160p:   4,
 		bangumitypes.Resolution1080p:   3,
 		bangumitypes.Resolution720p:    2,
 		bangumitypes.ResolutionUnknown: 1,
@@ -59,11 +58,11 @@ type RSSManager struct {
 	parsers         []*MikanRSSParser
 	logger          zerolog.Logger
 	lock            sync.Mutex
-	tmdb            *tmdb.Client
+	tmdb            *mdb.TMDBClient
 	bangumiTvClient *mdb.BangumiTVClient
 }
 
-func NewRSSManager(eb *bus.EventBus, db *db.DB, period time.Duration, tmdbClient *tmdb.Client, bangumiTVClient *mdb.BangumiTVClient) (*RSSManager, error) {
+func NewRSSManager(eb *bus.EventBus, db *db.DB, period time.Duration, tmdbClient *mdb.TMDBClient, bangumiTVClient *mdb.BangumiTVClient) (*RSSManager, error) {
 	man := RSSManager{
 		eb:              eb,
 		db:              db,

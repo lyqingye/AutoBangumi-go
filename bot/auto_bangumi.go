@@ -12,8 +12,6 @@ import (
 	"pikpak-bot/utils"
 	"time"
 
-	tmdb "github.com/cyruzin/golang-tmdb"
-
 	"github.com/rs/zerolog"
 )
 
@@ -67,7 +65,7 @@ func NewAutoBangumi(config *AutoBangumiConfig) (*AutoBangumi, error) {
 	if err != nil {
 		return nil, err
 	}
-	tmdbClient, err := tmdb.Init(config.TMDBToken)
+	tmdbClient, err := mdb.NewTMDBClient(config.TMDBToken)
 	if err != nil {
 		return nil, err
 	}
