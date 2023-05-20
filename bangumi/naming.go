@@ -15,14 +15,18 @@ var (
 		".rmvb": nil,
 		".wmv":  nil,
 	}
-	AssResource = map[string]interface{}{
-		".ass":    nil,
-		".srt":    nil,
-		".stl":    nil,
-		".sbv":    nil,
-		".webvtt": nil,
-		".dfxp":   nil,
-		".ttml":   nil,
+	AssResource = []string{
+		".sc.ass",
+		".tc.ass",
+		".zh.ass",
+		".cn.ass",
+		".ass",
+		".srt",
+		".stl",
+		".sbv",
+		".webvtt",
+		".dfxp",
+		".ttml",
 	}
 
 	SubTitleLangKeyword = map[string]string{
@@ -55,25 +59,23 @@ func RenamingEpisodeFileName(ep *Episode, filename string) string {
 	if ext == "" {
 		return newName
 	}
-	if isBangumiMediaResource(ext) {
-		return fmt.Sprintf("%s%s", newName, ext)
+
+	for keyword := range MediaResource {
+		if strings.HasSuffix(filename, keyword) {
+			return fmt.Sprintf("%s%s", newName, keyword)
+		}
 	}
-	if isASSResource(ext) {
-		for keyword, lang := range SubTitleLangKeyword {
-			if strings.Contains(filename, keyword) {
-				return fmt.Sprintf("%s.%s%s", newName, strings.ToLower(lang), ext)
+
+	for _,extension := range AssResource {
+		if strings.HasSuffix(filename, extension) {
+			// Subtitle Resource, try predict lang
+			for keyword, lang := range SubTitleLangKeyword {
+				if strings.Contains(filename, keyword) {
+					return fmt.Sprintf("%s.%s%s", newName, strings.ToLower(lang), extension)
+				}
 			}
+			return fmt.Sprintf("%s%s", newName, extension)
 		}
 	}
 	return ""
-}
-
-func isBangumiMediaResource(extension string) bool {
-	_, found := MediaResource[strings.ToLower(extension)]
-	return found
-}
-
-func isASSResource(extension string) bool {
-	_, found := AssResource[strings.ToLower(extension)]
-	return found
 }
