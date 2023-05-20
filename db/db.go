@@ -15,6 +15,7 @@ func NewDB(home string) (*DB, error) {
 		home: home,
 		cdc:  JsonCodec{},
 	}
+
 	inner, err := tmdb.NewGoLevelDB("data", home)
 	if err != nil {
 		return nil, err

@@ -40,7 +40,6 @@ type Subjects struct {
 	Locked  bool  `json:"locked"`
 	Nsfw    bool  `json:"nsfw"`
 	Type    int   `json:"type"`
-	// InfoBox  []map[string][]string `json:"infobox2"`
 	InfoBox []any `json:"infobox"`
 }
 
@@ -116,7 +115,7 @@ func (client *BangumiTVClient) SearchAnime(keyword string) (*Subjects, error) {
 	}
 	params.Filter.Type = append(params.Filter.Type, SubjectTypeAnime)
 	queryParams := map[string]string{
-		"limit":  "1",
+		"limit":  "100",
 		"offset": "0",
 	}
 	var pageResponse PageResponse
@@ -128,9 +127,23 @@ func (client *BangumiTVClient) SearchAnime(keyword string) (*Subjects, error) {
 	if pageResponse.Total == 0 {
 		return nil, fmt.Errorf("bangumi tv search result is empty")
 	}
-	err = json.Unmarshal(pageResponse.Data[0], &subject)
-	if err != nil {
-		return nil, err
+	matched := false
+	var firstSubject Subjects
+	for i, entity := range pageResponse.Data {
+		err = json.Unmarshal(entity, &subject)
+		if err != nil {
+			return nil, err
+		}
+		if i == 0 {
+			firstSubject = subject
+		}
+		if subject.NameCn == keyword || subject.Name == keyword {
+			matched = true
+			break
+		}
+	}
+	if !matched && len(pageResponse.Data) != 0 {
+		subject = firstSubject
 	}
 	return client.GetSubjects(subject.ID)
 }
