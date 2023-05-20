@@ -21,7 +21,6 @@ func TestAutoBangumi_Start(t *testing.T) {
 	autoBangumiBot, err := bot.NewAutoBangumi(&config)
 	require.NoError(t, err)
 	require.NotNil(t, autoBangumiBot)
-	err = autoBangumiBot.AddMikanRss("https://mikanani.me/RSS/Bangumi?bangumiId=3002")
 	require.NoError(t, err)
 	autoBangumiBot.Start()
 }
@@ -40,7 +39,6 @@ func TestAutoBangumi_Start2(t *testing.T) {
 	autoBangumiBot, err := bot.NewAutoBangumi(&config)
 	require.NoError(t, err)
 	require.NotNil(t, autoBangumiBot)
-	err = autoBangumiBot.AddMikanRss("https://mikanani.me/RSS/Bangumi?bangumiId=3002")
 	require.NoError(t, err)
 	autoBangumiBot.Start()
 }
