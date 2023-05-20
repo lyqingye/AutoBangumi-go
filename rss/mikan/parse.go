@@ -207,7 +207,7 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 	bangumi.Season = cache.Season
 	bangumi.EPCount = cache.EPCount
 	bangumi.TmDBId = cache.TMDBId
-	bangumi.SubjectId = cache.SubjectId
+	bangumi.SubjectId = episode.SubjectId
 	bangumi.Title = cache.BangumiTitle
 
 	episode.Season = bangumi.Season
