@@ -29,7 +29,7 @@ func TestParseMikanRss(t *testing.T) {
 	require.NoError(t, err)
 	eb := bus.NewEventBus()
 	eb.Start()
-	parser, err := rss.NewMikanRSSParser("https://mikanani.me/RSS/MyBangumi?token=yvx3o96Ud1u1Fy7A4y2Cfp4gasJrQJa8E9T4nfcfZPU%3d", eb, db, tmdbClient, bangumiTVClient)
+	parser, err := rss.NewMikanRSSParser("https://mikanani.me/RSS/Bangumi?bangumiId=444", eb, db, tmdbClient, bangumiTVClient)
 	require.NoError(t, err)
 	rssInfo, err := parser.Parse()
 	require.NoError(t, err)
