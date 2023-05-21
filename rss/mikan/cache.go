@@ -1,7 +1,6 @@
 package mikan
 
 import (
-	bangumitypes "pikpak-bot/bangumi"
 	"pikpak-bot/mdb"
 	"strconv"
 )
@@ -17,18 +16,6 @@ var (
 	KeyBlackItemLink                = []byte("mikan-black-item")
 	KeyMikanBangumiToBangumiTvCache = []byte("mikan-bangumi-to-bangumi-tv-cache")
 )
-
-// ParseCache
-// Indexes:
-// - Mikan ItemLink -> Cache
-type ParseCache struct {
-	BangumiTitle string
-	TMDBId       int64
-	SubjectId    int64
-	Season       uint
-	EPCount      uint
-	Episode      bangumitypes.Episode
-}
 
 func getParseCacheKeyByLink(link string) []byte {
 	return append(KeyParseCacheByLink, []byte(link)...)
@@ -53,8 +40,8 @@ func getMikanBangumiToBangumiTVCache(mikanBangumiId string) []byte {
 	return append(KeyMikanBangumiToBangumiTvCache, []byte(mikanBangumiId)...)
 }
 
-func (parser *MikanRSSParser) getParseCache(itemLink string) (*ParseCache, bool) {
-	cache := ParseCache{}
+func (parser *MikanRSSParser) getParseCache(itemLink string) (*ParseItemResult, bool) {
+	cache := ParseItemResult{}
 	found, err := parser.db.Get(getParseCacheKeyByLink(itemLink), &cache)
 	if err != nil {
 		return nil, false
@@ -62,7 +49,7 @@ func (parser *MikanRSSParser) getParseCache(itemLink string) (*ParseCache, bool)
 	return &cache, found
 }
 
-func (parser *MikanRSSParser) storeParseCache(itemLink string, cache *ParseCache) {
+func (parser *MikanRSSParser) storeParseCache(itemLink string, cache *ParseItemResult) {
 	err := parser.db.Set(getParseCacheKeyByLink(itemLink), cache)
 	if err != nil {
 		parser.logger.Err(err).Msg("store parse cache error")

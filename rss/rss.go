@@ -1,9 +1,6 @@
 package rss
 
 import (
-	"encoding/binary"
-	"errors"
-	"fmt"
 	bangumitypes "pikpak-bot/bangumi"
 	"pikpak-bot/bus"
 	"pikpak-bot/db"
@@ -37,11 +34,13 @@ type RSSManager struct {
 	eb              *bus.EventBus
 	db              *db.DB
 	ticker          *time.Ticker
-	parsers         []*mikan.MikanRSSParser
 	logger          zerolog.Logger
-	lock            sync.Mutex
+	refreshLock     sync.Mutex
 	tmdb            *mdb.TMDBClient
 	bangumiTvClient *mdb.BangumiTVClient
+	stateLock       sync.Mutex
+	inComplete      map[string]bangumitypes.Bangumi
+	complete        map[string]bangumitypes.Bangumi
 }
 
 func NewRSSManager(eb *bus.EventBus, db *db.DB, period time.Duration, tmdbClient *mdb.TMDBClient, bangumiTVClient *mdb.BangumiTVClient) (*RSSManager, error) {
@@ -49,81 +48,15 @@ func NewRSSManager(eb *bus.EventBus, db *db.DB, period time.Duration, tmdbClient
 		eb:              eb,
 		db:              db,
 		logger:          utils.GetLogger("RSSManager"),
-		lock:            sync.Mutex{},
+		refreshLock:     sync.Mutex{},
 		tmdb:            tmdbClient,
 		bangumiTvClient: bangumiTVClient,
+		stateLock:       sync.Mutex{},
+		complete:        make(map[string]bangumitypes.Bangumi),
+		inComplete:      make(map[string]bangumitypes.Bangumi),
 	}
 	man.ticker = time.NewTicker(period)
-	err := man.initRSSLinkFromDB()
-	if err != nil {
-		return nil, err
-	}
 	return &man, nil
-}
-
-func (man *RSSManager) initRSSLinkFromDB() error {
-	rssLinks, err := man.ListRSSLink()
-	if err != nil {
-		return err
-	}
-	for _, rss := range rssLinks {
-		err := man.AddMikanRss(rss)
-		if err != nil {
-			return err
-		}
-		man.logger.Debug().Str("link", rss).Msg("load rss link")
-	}
-	return nil
-}
-
-func (man *RSSManager) saveRSSLinkToDB(newRssLink string) error {
-	rssLinks, err := man.ListRSSLink()
-	if err != nil {
-		return err
-	}
-	found := false
-	for _, rss := range rssLinks {
-		if rss == newRssLink {
-			found = true
-			break
-		}
-	}
-	if !found {
-		rssLinks = append(rssLinks, newRssLink)
-	}
-	return man.db.Set(KeyRSSLink, &rssLinks)
-}
-
-func (man *RSSManager) removeRSSLinkFromDB(rssLink string) error {
-	rssLinks, err := man.ListRSSLink()
-	if err != nil {
-		return err
-	}
-	var finalRssLinks []string
-	found := false
-	for _, rss := range rssLinks {
-		if rss == rssLink {
-			found = true
-		} else {
-			finalRssLinks = append(finalRssLinks, rss)
-		}
-	}
-	if found {
-		return man.db.Set(KeyRSSLink, &finalRssLinks)
-	}
-	return nil
-}
-
-func (man *RSSManager) ListRSSLink() ([]string, error) {
-	var rssLinks []string
-	found, err := man.db.Get(KeyRSSLink, &rssLinks)
-	if err != nil {
-		return nil, err
-	}
-	if !found {
-		return nil, nil
-	}
-	return rssLinks, nil
 }
 
 func (man *RSSManager) Start() {
@@ -134,167 +67,44 @@ func (man *RSSManager) Start() {
 	}
 }
 
-func (man *RSSManager) AddMikanRss(mikanRss string) error {
-	for _, parser := range man.parsers {
-		if mikanRss == parser.RssLink() {
-			return nil
-		}
-	}
-	parser, err := mikan.NewMikanRSSParser(mikanRss, man.eb, man.db, man.tmdb, man.bangumiTvClient)
-	if err != nil {
-		return err
-	}
-	man.parsers = append(man.parsers, parser)
-	err = man.saveRSSLinkToDB(mikanRss)
-
-	go man.refreshParser(parser)
-	return err
-}
-
-func (man *RSSManager) RemoveMikanRss(mikanRss string) error {
-	return man.removeRSSLinkFromDB(mikanRss)
-}
-
 func (man *RSSManager) Refresh() {
-	man.logger.Debug().Msg("try refresh all rss")
-	man.lock.Lock()
-	man.logger.Debug().Msg("start refresh all rss")
-	defer man.lock.Unlock()
-	for _, parser := range man.parsers {
-		man.refreshParser(parser)
+	err := man.refreshInComplete()
+	if err != nil {
+		man.logger.Error().Err(err).Msg("refresh incomplete err")
 	}
 }
 
-func (man *RSSManager) refreshParser(parser *mikan.MikanRSSParser) {
-	man.logger.Info().Str("rssLink", parser.RssLink()).Msg("refresh RSS")
-	bangumis, err := parser.Parse()
-	if err != nil {
-		man.logger.Error().Str("rssLink", parser.RssLink()).Err(err).Msg("refresh RSS Failed")
-		return
-	}
-	err = man.updateIndex(parser.RssLink(), bangumis)
-	if err != nil {
-		man.logger.Error().Str("rssLink", parser.RssLink()).Err(err).Msg("Update index Failed")
-		return
-	}
-	for _, bangumi := range bangumis {
-		for _, ep := range bangumi.Episodes {
-			if !man.alreadyRead(&ep) {
-				man.eb.Publish(bus.RSSTopic, bus.Event{
-					EventType: bus.RSSUpdateEventType,
-					Inner:     ep,
-				})
-				man.logger.Info().Str("bangumi", ep.BangumiTitle).Uint("season", ep.Season).Uint("ep", ep.EPNumber).Msg("rss update")
-			}
-		}
-	}
-}
-
-func (man *RSSManager) MarkEpisodeAsRead(latestEp *bangumitypes.Episode) error {
-	ep, err := man.getEpisode(latestEp.SubjectId, latestEp.Season, latestEp.EPNumber)
+func (man *RSSManager) refreshInComplete() error {
+	man.stateLock.Lock()
+	defer man.stateLock.Unlock()
+	parser, err := mikan.NewMikanRSSParser("https://mikanani.me", man.eb, man.db, man.tmdb, man.bangumiTvClient)
 	if err != nil {
 		return err
 	}
-	ep.Read = true
-	return man.setEpisode(ep)
-}
-
-func (man *RSSManager) MarkEpisodeUnRead(latestEp *bangumitypes.Episode) error {
-	ep, err := man.getEpisode(latestEp.SubjectId, latestEp.Season, latestEp.EPNumber)
-	if err != nil {
-		return err
-	}
-	ep.Read = false
-	return man.setEpisode(ep)
-}
-
-func (man *RSSManager) GetBangumiByEpisode(ep *bangumitypes.Episode) (*bangumitypes.Bangumi, error) {
-	bangumi := bangumitypes.Bangumi{}
-	found, err := man.db.Get(getSubKeyBySubjectId(ep.SubjectId), &bangumi)
-	if err != nil {
-		return nil, err
-	}
-	if found {
-		return &bangumi, nil
-	}
-	return nil, errors.New("bangumi not found")
-}
-
-func (man *RSSManager) alreadyRead(latestEp *bangumitypes.Episode) bool {
-	episode, err := man.getEpisode(latestEp.SubjectId, latestEp.Season, latestEp.EPNumber)
-	if err != nil {
-		return false
-	}
-	return episode.Read
-}
-
-func (man *RSSManager) getEpisode(subjectId int64, season uint, ep uint) (*bangumitypes.Episode, error) {
-	episode := bangumitypes.Episode{}
-	found, err := man.db.Get(getEpisodeKey(subjectId, season, ep), &episode)
-	if err != nil {
-		return nil, err
-	}
-	if !found {
-		return nil, fmt.Errorf("episode: %d %d %d not found", subjectId, season, ep)
-	}
-	return &episode, nil
-}
-
-func (man *RSSManager) setEpisode(ep *bangumitypes.Episode) error {
-	return man.db.Set(getEpisodeKey2(ep), ep)
-}
-
-func (man *RSSManager) updateIndex(rssLink string, bangumis []bangumitypes.Bangumi) error {
-	for _, bangumi := range bangumis {
-		if found, err := man.db.Has(getSubKeyByRSSLink(rssLink)); err != nil {
-			return err
-		} else {
-			bangumiCopy := bangumi
-			bangumiCopy.Episodes = nil
-			err = man.db.Set(getSubKeyByRSSLink(rssLink), &bangumiCopy)
-			if err != nil {
-				return err
-			}
-			err = man.db.Set(getSubKeyBySubjectId(bangumiCopy.SubjectId), &bangumiCopy)
-			if err != nil {
-				return err
-			}
-			if !found {
-				for _, ep := range bangumi.Episodes {
-					err = man.db.Set(getEpisodeKey2(&ep), &ep)
-					if err != nil {
-						return err
-					}
-				}
-			} else {
-				for _, ep := range bangumi.Episodes {
-					if existEpisode, err := man.db.Has(getEpisodeKey2(&ep)); err != nil || existEpisode {
-						continue
-					}
-					err = man.db.Set(getEpisodeKey2(&ep), &ep)
-					if err != nil {
-						return err
-					}
-				}
-			}
+	for title, bangumi := range man.inComplete {
+		err = parser.CompleteBangumi(&bangumi)
+		if err != nil {
+			continue
 		}
+		man.inComplete[title] = bangumi
+		man.eb.Publish(bus.RSSTopic, bus.Event{
+			EventType: bus.RSSUpdateEventType,
+			Inner:     bangumi,
+		})
 	}
 	return nil
 }
 
-func getEpisodeKey(subjectId int64, season uint, ep uint) []byte {
-	return append(KeyRSSSubscribeInfo, []byte(fmt.Sprintf("%d-%d-%d", subjectId, season, ep))...)
-}
-func getEpisodeKey2(ep *bangumitypes.Episode) []byte {
-	return getEpisodeKey(ep.SubjectId, ep.Season, ep.EPNumber)
-}
-
-func getSubKeyByRSSLink(rssLink string) []byte {
-	return append(KeyRSSSubscribeInfo, []byte(rssLink)...)
-}
-
-func getSubKeyBySubjectId(subjectId int64) []byte {
-	byteSlice := make([]byte, 8)
-	binary.BigEndian.PutUint64(byteSlice, uint64(subjectId))
-	return append(KeyRSSSubscribeInfo, byteSlice...)
+func (man *RSSManager) MarkEpisodeComplete(info *bangumitypes.BangumiInfo, seasonNum uint, episode bangumitypes.Episode) {
+	man.stateLock.Lock()
+	defer man.stateLock.Unlock()
+	if bangumi, found := man.inComplete[info.Title]; found {
+		if season, foundSeason := bangumi.Seasons[seasonNum]; foundSeason {
+			if !season.IsComplete(episode.Number) {
+				season.Complete = append(season.Complete, episode.Number)
+				bangumi.Seasons[seasonNum] = season
+			}
+		}
+		man.inComplete[info.Title] = bangumi
+	}
 }

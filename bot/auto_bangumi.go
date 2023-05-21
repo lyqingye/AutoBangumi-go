@@ -96,34 +96,21 @@ func (bot *AutoBangumi) Start() {
 	bot.rssMan.Start()
 }
 
-func (bot *AutoBangumi) AddMikanRss(rssLink string) error {
-	return bot.rssMan.AddMikanRss(rssLink)
-}
-
 func (bot *AutoBangumi) HandleEvent(event bus.Event) {
 	bot.logger.Info().Str("event type", event.EventType).Msg("recv event")
 	var err error
 	switch event.EventType {
 	case bus.RSSUpdateEventType:
-		episode := event.Inner.(bangumi.Episode)
-		err = bot.handleBangumiUpdate(&episode)
+		bangumi := event.Inner.(bangumi.Bangumi)
+		bot.handleBangumiUpdate(&bangumi)
 	}
 	if err != nil {
 		bot.logger.Error().Err(err).Str("event type", event.EventType).Msg("handle event error")
 	}
 }
 
-func (bot *AutoBangumi) handleBangumiUpdate(episode *bangumi.Episode) error {
-	bot.logger.Info().Msg("handle bangumi update event")
+func (bot *AutoBangumi) handleEpisodeUpdate(info *bangumi.BangumiInfo, seasonNum uint, episode bangumi.Episode) error {
 	if episode.TorrentHash != "" {
-		refBangumi, err := bot.rssMan.GetBangumiByEpisode(episode)
-		if err != nil {
-			return err
-		}
-		opts := qibittorrent.AddTorrentOptions{
-			Paused: true,
-			Rename: bangumi.RenamingEpisodeFileName(episode, refBangumi.Title),
-		}
 
 		// check torrent downloading
 		torrentTask, err := bot.qb.GetTorrent(episode.TorrentHash)
@@ -133,22 +120,27 @@ func (bot *AutoBangumi) handleBangumiUpdate(episode *bangumi.Episode) error {
 		if err == nil && torrentTask != nil {
 			// download complete
 			if torrentTask.CompletionOn != 0 {
-				bot.logger.Info().Str("title", episode.BangumiTitle).Uint("season", episode.Season).Uint("episode", episode.EPNumber).Msg("download complete")
-				return bot.rssMan.MarkEpisodeAsRead(episode)
+				bot.logger.Info().Str("title", info.Title).Uint("season", seasonNum).Uint("episode", episode.Number).Msg("download complete")
+				bot.rssMan.MarkEpisodeComplete(info, seasonNum, episode)
 			}
 
 			// downloading
-			bot.logger.Info().Str("title", episode.BangumiTitle).Uint("season", episode.Season).Uint("episode", episode.EPNumber).Msg("downloading")
+			bot.logger.Info().Str("title", info.Title).Uint("season", seasonNum).Uint("episode", episode.Number).Msg("downloading")
 			bot.qb.WaitForDownloadComplete(torrentTask.Hash, time.Second*5, func() bool {
-				bot.logger.Info().Str("title", episode.BangumiTitle).Uint("season", episode.Season).Uint("episode", episode.EPNumber).Msg("download complete")
-				return bot.rssMan.MarkEpisodeAsRead(episode) == nil
+				bot.logger.Info().Str("title", info.Title).Uint("season", seasonNum).Uint("episode", episode.Number).Msg("download complete")
+				bot.rssMan.MarkEpisodeComplete(info, seasonNum, episode)
+				return true
 			})
 			return nil
 		}
 
 		// try download
-		bot.logger.Info().Str("title", episode.BangumiTitle).Uint("season", episode.Season).Uint("episode", episode.EPNumber).Msg("start download episode")
-		hash, err := bot.qb.AddTorrentEx(&opts, episode.Torrent, bangumi.DirNaming(refBangumi))
+		opts := qibittorrent.AddTorrentOptions{
+			Paused: true,
+			Rename: bangumi.RenamingEpisodeFileName(info, seasonNum, &episode, info.Title),
+		}
+		bot.logger.Info().Str("title", info.Title).Uint("season", seasonNum).Uint("episode", episode.Number).Msg("start download episode")
+		hash, err := bot.qb.AddTorrentEx(&opts, episode.Torrent, bangumi.DirNaming(info, seasonNum))
 		if err != nil {
 			return err
 		}
@@ -165,7 +157,7 @@ func (bot *AutoBangumi) handleBangumiUpdate(episode *bangumi.Episode) error {
 			}
 
 			// renaming torrent files
-			err = bot.renameTorrent(hash, episode)
+			err = bot.renameTorrent(hash, info, seasonNum, &episode)
 			if err != nil {
 				bot.logger.Error().Err(err).Msg("rename torrent files error")
 				return
@@ -181,16 +173,27 @@ func (bot *AutoBangumi) handleBangumiUpdate(episode *bangumi.Episode) error {
 			// wait for download complete
 			go func() {
 				bot.qb.WaitForDownloadComplete(hash, time.Second*5, func() bool {
-					bot.logger.Info().Str("title", episode.BangumiTitle).Uint("season", episode.Season).Uint("episode", episode.EPNumber).Msg("download complete")
-					return bot.rssMan.MarkEpisodeAsRead(episode) == nil
+					bot.logger.Info().Str("title", info.Title).Uint("season", seasonNum).Uint("episode", episode.Number).Msg("download complete")
+					bot.rssMan.MarkEpisodeComplete(info, seasonNum, episode)
+					return true
 				})
 			}()
 		}()
 
 	} else {
-		bot.logger.Warn().Str("title", episode.BangumiTitle).Uint("season", episode.Season).Uint("episode", episode.EPNumber).Msg("skip episode, torrent hash is empty")
+		bot.logger.Warn().Str("title", info.Title).Uint("season", seasonNum).Uint("episode", episode.Number).Msg("skip episode, torrent hash is empty")
 	}
 	return nil
+}
+
+func (bot *AutoBangumi) handleBangumiUpdate(bangumi *bangumi.Bangumi) {
+	bot.logger.Info().Msg("handle bangumi update event")
+	for _, season := range bangumi.Seasons {
+		for _, episode := range season.ListIncompleteEpisodes() {
+			err := bot.handleEpisodeUpdate(&bangumi.Info, season.Number, episode)
+			bot.logger.Error().Err(err).Msg("handle episode update error")
+		}
+	}
 }
 
 func (bot *AutoBangumi) qbAutoResumePausedTorrents() {
@@ -217,13 +220,13 @@ func (bot *AutoBangumi) qbAutoResumePausedTorrents() {
 	}
 }
 
-func (bot *AutoBangumi) renameTorrent(hash string, episode *bangumi.Episode) error {
+func (bot *AutoBangumi) renameTorrent(hash string, info *bangumi.BangumiInfo, seasonNum uint, episode *bangumi.Episode) error {
 	content, err := bot.qb.GetTorrentContent(hash, []int64{})
 	if err != nil {
 		return err
 	}
 	for _, fi := range content {
-		newName := bangumi.RenamingEpisodeFileName(episode, fi.Name)
+		newName := bangumi.RenamingEpisodeFileName(info, seasonNum, episode, fi.Name)
 		if newName != "" {
 			err = bot.qb.RenameFile(hash, fi.Name, newName)
 			if err != nil {

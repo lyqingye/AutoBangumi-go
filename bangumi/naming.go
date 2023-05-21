@@ -49,12 +49,12 @@ var (
 	}
 )
 
-func DirNaming(b *Bangumi) string {
-	return filepath.Join(b.Title, fmt.Sprintf("Season %02d", b.Season))
+func DirNaming(info *BangumiInfo, seasonNum uint) string {
+	return filepath.Join(info.Title, fmt.Sprintf("Season %02d", seasonNum))
 }
 
-func RenamingEpisodeFileName(ep *Episode, filename string) string {
-	newName := fmt.Sprintf("[%s] S%02dE%02d", ep.BangumiTitle, ep.Season, ep.EPNumber)
+func RenamingEpisodeFileName(info *BangumiInfo, seasonNum uint, ep *Episode, filename string) string {
+	newName := fmt.Sprintf("[%s] S%02dE%02d", info.Title, seasonNum, ep.Number)
 	ext := filepath.Ext(filename)
 	if ext == "" {
 		return newName
@@ -66,7 +66,7 @@ func RenamingEpisodeFileName(ep *Episode, filename string) string {
 		}
 	}
 
-	for _,extension := range AssResource {
+	for _, extension := range AssResource {
 		if strings.HasSuffix(filename, extension) {
 			// Subtitle Resource, try predict lang
 			for keyword, lang := range SubTitleLangKeyword {
