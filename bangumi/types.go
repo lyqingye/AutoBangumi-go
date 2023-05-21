@@ -47,6 +47,21 @@ type Bangumi struct {
 	Seasons map[uint]Season `json:"seasons"`
 }
 
+func (bangumi *Bangumi) IsComplete() bool {
+	if len(bangumi.Seasons) == 0 {
+		return false
+	}
+
+	result := true
+	for _, season := range bangumi.Seasons {
+		if len(season.Complete) != int(season.EpCount) {
+			result = false
+			break
+		}
+	}
+	return result
+}
+
 type Season struct {
 	SubjectId      int64     `json:"subjectId"`
 	MikanBangumiId string    `json:"mikanBangumiId"`

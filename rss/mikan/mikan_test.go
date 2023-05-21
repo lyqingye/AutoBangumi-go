@@ -10,8 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	bangumitypes "pikpak-bot/bangumi"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseMikanRss(t *testing.T) {
@@ -78,9 +79,14 @@ func TestMikanCompleteBangumi(t *testing.T) {
 	bangumi := bangumitypes.Bangumi{
 		Info: bangumitypes.BangumiInfo{
 			Title: "女神的露天咖啡厅",
-			
 		},
 	}
+	err = parser.CompleteBangumi(&bangumi)
+	require.NoError(t, err)
+	season := bangumi.Seasons[1]
+	season.Complete = append(season.Complete, 1, 2, 3, 4)
+	season.Episodes = nil
+	bangumi.Seasons[1] = season
 	err = parser.CompleteBangumi(&bangumi)
 	require.NoError(t, err)
 }

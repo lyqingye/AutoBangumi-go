@@ -38,12 +38,10 @@ type RSSManager struct {
 	refreshLock     sync.Mutex
 	tmdb            *mdb.TMDBClient
 	bangumiTvClient *mdb.BangumiTVClient
-	stateLock       sync.Mutex
-	inComplete      map[string]bangumitypes.Bangumi
-	complete        map[string]bangumitypes.Bangumi
+	bgmMan      *bangumitypes.BangumiManager
 }
 
-func NewRSSManager(eb *bus.EventBus, db *db.DB, period time.Duration, tmdbClient *mdb.TMDBClient, bangumiTVClient *mdb.BangumiTVClient) (*RSSManager, error) {
+func NewRSSManager(bgmMan *bangumitypes.BangumiManager,eb *bus.EventBus, db *db.DB, period time.Duration, tmdbClient *mdb.TMDBClient, bangumiTVClient *mdb.BangumiTVClient) (*RSSManager, error) {
 	man := RSSManager{
 		eb:              eb,
 		db:              db,
@@ -51,9 +49,7 @@ func NewRSSManager(eb *bus.EventBus, db *db.DB, period time.Duration, tmdbClient
 		refreshLock:     sync.Mutex{},
 		tmdb:            tmdbClient,
 		bangumiTvClient: bangumiTVClient,
-		stateLock:       sync.Mutex{},
-		complete:        make(map[string]bangumitypes.Bangumi),
-		inComplete:      make(map[string]bangumitypes.Bangumi),
+		bgmMan: bgmMan,
 	}
 	man.ticker = time.NewTicker(period)
 	return &man, nil
@@ -75,36 +71,22 @@ func (man *RSSManager) Refresh() {
 }
 
 func (man *RSSManager) refreshInComplete() error {
-	man.stateLock.Lock()
-	defer man.stateLock.Unlock()
 	parser, err := mikan.NewMikanRSSParser("https://mikanani.me", man.eb, man.db, man.tmdb, man.bangumiTvClient)
 	if err != nil {
 		return err
 	}
-	for title, bangumi := range man.inComplete {
-		err = parser.CompleteBangumi(&bangumi)
-		if err != nil {
-			continue
+	eb := man.eb
+	man.bgmMan.IterInCompleteBangumi(func(man *bangumitypes.BangumiManager, bangumi *bangumitypes.Bangumi) bool {
+		err = parser.CompleteBangumi(bangumi)
+		if err == nil {
+			eb.Publish(bus.RSSTopic, bus.Event{
+				EventType: bus.RSSUpdateEventType,
+				Inner:     bangumi,
+			})
+		} else {
+			// TODO: logger
 		}
-		man.inComplete[title] = bangumi
-		man.eb.Publish(bus.RSSTopic, bus.Event{
-			EventType: bus.RSSUpdateEventType,
-			Inner:     bangumi,
-		})
-	}
+		return false
+	})
 	return nil
-}
-
-func (man *RSSManager) MarkEpisodeComplete(info *bangumitypes.BangumiInfo, seasonNum uint, episode bangumitypes.Episode) {
-	man.stateLock.Lock()
-	defer man.stateLock.Unlock()
-	if bangumi, found := man.inComplete[info.Title]; found {
-		if season, foundSeason := bangumi.Seasons[seasonNum]; foundSeason {
-			if !season.IsComplete(episode.Number) {
-				season.Complete = append(season.Complete, episode.Number)
-				bangumi.Seasons[seasonNum] = season
-			}
-		}
-		man.inComplete[info.Title] = bangumi
-	}
 }

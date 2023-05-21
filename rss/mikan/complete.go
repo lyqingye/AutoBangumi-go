@@ -66,14 +66,7 @@ func (parser *MikanRSSParser) completeBangumiBySearchResult(bangumi *bangumitype
 
 func (parser *MikanRSSParser) mergeSeasonInfo(dest *bangumitypes.Season, source *bangumitypes.Season) {
 	for _, searchEpisode := range source.Episodes {
-		isComplete := false
-		for _, complete := range dest.Complete {
-			if searchEpisode.Number == complete {
-				isComplete = true
-				break
-			}
-		}
-		if isComplete {
+		if dest.IsComplete(searchEpisode.Number) {
 			continue
 		}
 

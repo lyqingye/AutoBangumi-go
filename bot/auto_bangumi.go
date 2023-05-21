@@ -24,6 +24,7 @@ type AutoBangumiConfig struct {
 	BangumiTVApiEndpoint string
 	TMDBToken            string
 	RSSUpdatePeriod      time.Duration
+	BangumiHome          string
 }
 
 func (config *AutoBangumiConfig) Validate() error {
@@ -41,6 +42,9 @@ func (config *AutoBangumiConfig) Validate() error {
 	if config.TMDBToken == "" {
 		return errors.New("tmdb token is empty")
 	}
+	if config.BangumiHome == "" {
+		return errors.New("empty bangumi home")
+	}
 	return nil
 }
 
@@ -50,6 +54,7 @@ type AutoBangumi struct {
 	eb     *bus.EventBus
 	rssMan *rss.RSSManager
 	logger zerolog.Logger
+	bgmMan *bangumi.BangumiManager
 }
 
 func NewAutoBangumi(config *AutoBangumiConfig) (*AutoBangumi, error) {
@@ -69,7 +74,11 @@ func NewAutoBangumi(config *AutoBangumiConfig) (*AutoBangumi, error) {
 	if err != nil {
 		return nil, err
 	}
-	rssMan, err := rss.NewRSSManager(eb, database, config.RSSUpdatePeriod, tmdbClient, bangumiTVClient)
+	bgmMan, err := bangumi.NewBangumiManager(config.BangumiHome)
+	if err != nil {
+		return nil, err
+	}
+	rssMan, err := rss.NewRSSManager(bgmMan, eb, database, config.RSSUpdatePeriod, tmdbClient, bangumiTVClient)
 	if err != nil {
 		return nil, err
 	}
@@ -121,14 +130,14 @@ func (bot *AutoBangumi) handleEpisodeUpdate(info *bangumi.BangumiInfo, seasonNum
 			// download complete
 			if torrentTask.CompletionOn != 0 {
 				bot.logger.Info().Str("title", info.Title).Uint("season", seasonNum).Uint("episode", episode.Number).Msg("download complete")
-				bot.rssMan.MarkEpisodeComplete(info, seasonNum, episode)
+				bot.bgmMan.MarkEpisodeComplete(info, seasonNum, episode)
 			}
 
 			// downloading
 			bot.logger.Info().Str("title", info.Title).Uint("season", seasonNum).Uint("episode", episode.Number).Msg("downloading")
 			bot.qb.WaitForDownloadComplete(torrentTask.Hash, time.Second*5, func() bool {
 				bot.logger.Info().Str("title", info.Title).Uint("season", seasonNum).Uint("episode", episode.Number).Msg("download complete")
-				bot.rssMan.MarkEpisodeComplete(info, seasonNum, episode)
+				bot.bgmMan.MarkEpisodeComplete(info, seasonNum, episode)
 				return true
 			})
 			return nil
@@ -174,7 +183,7 @@ func (bot *AutoBangumi) handleEpisodeUpdate(info *bangumi.BangumiInfo, seasonNum
 			go func() {
 				bot.qb.WaitForDownloadComplete(hash, time.Second*5, func() bool {
 					bot.logger.Info().Str("title", info.Title).Uint("season", seasonNum).Uint("episode", episode.Number).Msg("download complete")
-					bot.rssMan.MarkEpisodeComplete(info, seasonNum, episode)
+					bot.bgmMan.MarkEpisodeComplete(info, seasonNum, episode)
 					return true
 				})
 			}()
