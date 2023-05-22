@@ -41,7 +41,6 @@ func getMikanBangumiToBangumiTVCache(mikanBangumiId string) []byte {
 	return append(KeyMikanBangumiToBangumiTvCache, []byte(mikanBangumiId)...)
 }
 
-
 func (parser *MikanRSSParser) getParseCache(itemLink string) (*ParseItemResult, bool) {
 	cache := ParseItemResult{}
 	found, err := parser.db.Get(getParseCacheKeyByLink(itemLink), &cache)
@@ -50,7 +49,6 @@ func (parser *MikanRSSParser) getParseCache(itemLink string) (*ParseItemResult, 
 	}
 	return &cache, found
 }
-
 
 func (parser *MikanRSSParser) storeParseCache(itemLink string, cache *ParseItemResult) {
 	err := parser.db.Set(getParseCacheKeyByLink(itemLink), cache)
