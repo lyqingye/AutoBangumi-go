@@ -38,10 +38,10 @@ type RSSManager struct {
 	refreshLock     sync.Mutex
 	tmdb            *mdb.TMDBClient
 	bangumiTvClient *mdb.BangumiTVClient
-	bgmMan      *bangumitypes.BangumiManager
+	bgmMan          *bangumitypes.BangumiManager
 }
 
-func NewRSSManager(bgmMan *bangumitypes.BangumiManager,eb *bus.EventBus, db *db.DB, period time.Duration, tmdbClient *mdb.TMDBClient, bangumiTVClient *mdb.BangumiTVClient) (*RSSManager, error) {
+func NewRSSManager(bgmMan *bangumitypes.BangumiManager, eb *bus.EventBus, db *db.DB, period time.Duration, tmdbClient *mdb.TMDBClient, bangumiTVClient *mdb.BangumiTVClient) (*RSSManager, error) {
 	man := RSSManager{
 		eb:              eb,
 		db:              db,
@@ -49,7 +49,7 @@ func NewRSSManager(bgmMan *bangumitypes.BangumiManager,eb *bus.EventBus, db *db.
 		refreshLock:     sync.Mutex{},
 		tmdb:            tmdbClient,
 		bangumiTvClient: bangumiTVClient,
-		bgmMan: bgmMan,
+		bgmMan:          bgmMan,
 	}
 	man.ticker = time.NewTicker(period)
 	return &man, nil
@@ -76,15 +76,17 @@ func (man *RSSManager) refreshInComplete() error {
 		return err
 	}
 	eb := man.eb
+	logger := man.logger
 	man.bgmMan.IterInCompleteBangumi(func(man *bangumitypes.BangumiManager, bangumi *bangumitypes.Bangumi) bool {
 		err = parser.CompleteBangumi(bangumi)
 		if err == nil {
+			_ = man.Flush(bangumi)
 			eb.Publish(bus.RSSTopic, bus.Event{
 				EventType: bus.RSSUpdateEventType,
 				Inner:     bangumi,
 			})
 		} else {
-			// TODO: logger
+			logger.Error().Err(err).Str("title", bangumi.Info.Title).Msg("complete bangumi error")
 		}
 		return false
 	})

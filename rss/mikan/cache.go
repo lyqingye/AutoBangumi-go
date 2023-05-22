@@ -28,6 +28,7 @@ func getBangumiTVCacheKeyBySubjectId(subject int64) []byte {
 func getBangumiTVCacheKeyByKeyword(keyword string) []byte {
 	return append(KeyBangumiTVCacheByKeyword, []byte(keyword)...)
 }
+
 func getTMDBCacheByKeyword(keyword string) []byte {
 	return append(KeyTMDBCacheByKeyword, []byte(keyword)...)
 }

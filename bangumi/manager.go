@@ -2,6 +2,7 @@ package bangumi
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -41,7 +42,7 @@ func NewBangumiManager(home string) (*BangumiManager, error) {
 func (man *BangumiManager) init() error {
 	man.rwLock.Lock()
 	defer man.rwLock.Unlock()
-	filepath.WalkDir(man.home, func(path string, d fs.DirEntry, err error) error {
+	return filepath.WalkDir(man.home, func(path string, d fs.DirEntry, err error) error {
 		if strings.HasSuffix(path, ".json") {
 			bz, err := os.ReadFile(path)
 			var bangumi Bangumi
@@ -50,15 +51,16 @@ func (man *BangumiManager) init() error {
 				if err == nil {
 					if bangumi.IsComplete() {
 						man.complete[bangumi.Info.Title] = bangumi
+						man.logger.Debug().Str("title", bangumi.Info.Title).Msg("init complete bangumi")
 					} else {
 						man.inComplete[bangumi.Info.Title] = bangumi
+						man.logger.Debug().Str("title", bangumi.Info.Title).Msg("init inComplete bangumi")
 					}
 				}
 			}
 		}
 		return nil
 	})
-	return nil
 }
 
 func (man *BangumiManager) MarkEpisodeComplete(info *BangumiInfo, seasonNum uint, episode Episode) {
@@ -74,26 +76,28 @@ func (man *BangumiManager) MarkEpisodeComplete(info *BangumiInfo, seasonNum uint
 		if bangumi.IsComplete() {
 			delete(man.inComplete, info.Title)
 			man.complete[info.Title] = bangumi
-			man.logger.Debug().Str("title", bangumi.Info.Title).Msg("init complete bangumi")
 		} else {
 			man.inComplete[info.Title] = bangumi
-			man.logger.Debug().Str("title", bangumi.Info.Title).Msg("init inComplete bangumi")
 		}
 	}
 }
 
 func (man *BangumiManager) IterInCompleteBangumi(fn func(man *BangumiManager, bangumi *Bangumi) bool) {
-	man.rwLock.RLock()
-	defer man.rwLock.RUnlock()
+	man.rwLock.Lock()
+	defer man.rwLock.Unlock()
 	for title, bangumi := range man.inComplete {
-		if fn(man, &bangumi) {
+		result := fn(man, &bangumi)
+		man.inComplete[title] = bangumi
+		if result {
 			break
 		}
-		man.inComplete[title] = bangumi
 	}
 }
 
-func (man *BangumiManager) flush(bangumi *Bangumi) error {
-	// TODO
-	return nil
+func (man *BangumiManager) Flush(bangumi *Bangumi) error {
+	bz, err := json.Marshal(bangumi)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(man.home, fmt.Sprintf("%s.json", bangumi.Info.Title)), bz, os.ModePerm)
 }

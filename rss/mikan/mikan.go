@@ -77,7 +77,7 @@ func (parser *MikanRSSParser) getRss(link string) (*MikanRss, error) {
 func filterBangumi(bangumis []bangumitypes.Bangumi) {
 	for i, bgm := range bangumis {
 		for seasonNumber, season := range bgm.Seasons {
-			epGrouByNumber := make(map[uint][]bangumitypes.Episode)
+			epGroupByNumber := make(map[uint][]bangumitypes.Episode)
 			for _, ep := range season.Episodes {
 				if ep.Number > season.EpCount {
 					continue
@@ -85,14 +85,14 @@ func filterBangumi(bangumis []bangumitypes.Bangumi) {
 				if ep.Type != bangumitypes.EpisodeTypeNone {
 					continue
 				}
-				dupEps := epGrouByNumber[ep.Number]
+				dupEps := epGroupByNumber[ep.Number]
 				dupEps = append(dupEps, ep)
-				epGrouByNumber[ep.Number] = dupEps
+				epGroupByNumber[ep.Number] = dupEps
 			}
 
 			var filteredEps []bangumitypes.Episode
 
-			for _, eps := range epGrouByNumber {
+			for _, eps := range epGroupByNumber {
 				filteredEps = append(filteredEps, selectEpisode(eps))
 			}
 
