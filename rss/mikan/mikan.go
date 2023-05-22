@@ -9,9 +9,6 @@ import (
 	"pikpak-bot/mdb"
 	"pikpak-bot/utils"
 	"sort"
-
-	"github.com/go-resty/resty/v2"
-	"github.com/rs/zerolog"
 )
 
 type MikanRSSParser struct {

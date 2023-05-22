@@ -32,6 +32,7 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 	}
 
 	var episode bangumitypes.Episode
+
 	var bangumiInfo bangumitypes.BangumiInfo
 	var seasonNumber uint
 	var epCount uint
@@ -65,14 +66,12 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 			return err
 		}
 
+
 		episode.Magnet = fromWebPage.Episode.Magnet
 		episode.Torrent = fromWebPage.Episode.Torrent
 		episode.TorrentHash = fromWebPage.Episode.TorrentHash
 		mikanBangumiId = fromWebPage.MikanBangumiId
 		subjectId = fromWebPage.SubjectId
-
-		// episode.MikanBangumiId = episodeFromItem.MikanBangumiId
-		// episode.SubjectId = episodeFromItem.SubjectId
 
 		// Parse Episode from filename, result information is unreliable
 		// - BangumiTitle (nullable)
@@ -82,6 +81,7 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 		// - Resolution (nullable)
 		// - EpisodeType (nullable)
 		// - Subgroup (nullable)
+
 		fromFilename, err := parser.parseEpisodeByFilename(item.Title)
 		if err != nil {
 			return err
@@ -113,6 +113,7 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 		epCount = cache.EpCount
 		subjectId = cache.SubjectId
 		mikanBangumiId = cache.MikanBangumiId
+
 	}
 
 	// Try predict Episode season number using bangumi TV and tmdb
@@ -121,6 +122,7 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 	// 3. using air data to predict season number
 	//
 	if subjectId == 0 || seasonNumber == 0 {
+
 		// the subject id comes from parsing item link page
 		// if the subgroup does not have a link associated with bangumitv when publishing resources
 		// then we will try searching based on the title
