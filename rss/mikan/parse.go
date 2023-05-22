@@ -386,12 +386,28 @@ func (parser *MikanRSSParser) parseEpisodeByFilename(filename string) (*ParseIte
 		for _, l := range parsedElements.Language {
 			episode.SubtitleLang = append(episode.SubtitleLang, normalizationLang(l))
 		}
+	} else {
+		for keyword, lang := range bangumitypes.SubTitleLangKeyword {
+			if strings.Contains(filename, keyword) {
+				episode.SubtitleLang = append(episode.SubtitleLang, lang)
+			}
+		}
 	}
 
 	if len(parsedElements.Subtitles) > 0 {
 		for _, l := range parsedElements.Subtitles {
 			episode.SubtitleLang = append(episode.SubtitleLang, normalizationLang(l))
 		}
+	} else {
+		for keyword, lang := range bangumitypes.SubTitleLangKeyword {
+			if strings.Contains(filename, keyword) {
+				episode.SubtitleLang = append(episode.SubtitleLang, lang)
+			}
+		}
+	}
+
+	if len(episode.SubtitleLang) != 0 {
+		episode.SubtitleLang = append(episode.SubtitleLang, bangumitypes.SubtitleUnknown)
 	}
 
 	if len(parsedElements.AnimeType) == 0 {
