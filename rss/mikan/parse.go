@@ -71,9 +71,6 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 		mikanBangumiId = fromWebPage.MikanBangumiId
 		subjectId = fromWebPage.SubjectId
 
-		// episode.MikanBangumiId = episodeFromItem.MikanBangumiId
-		// episode.SubjectId = episodeFromItem.SubjectId
-
 		// Parse Episode from filename, result information is unreliable
 		// - BangumiTitle (nullable)
 		// - Eposide Number (nullable)
@@ -82,6 +79,7 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 		// - Resolution (nullable)
 		// - EpisodeType (nullable)
 		// - Subgroup (nullable)
+
 		fromFilename, err := parser.parseEpisodeByFilename(item.Title)
 		if err != nil {
 			return err
