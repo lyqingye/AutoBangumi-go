@@ -1,11 +1,12 @@
 package cmd
 
 import (
-	"github.com/spf13/pflag"
 	"os"
 	"pikpak-bot/bot"
 	"strconv"
 	"time"
+
+	"github.com/spf13/pflag"
 
 	"github.com/spf13/cobra"
 )
@@ -20,6 +21,7 @@ const (
 	EnvDbHome               = "ENV_DB_HOME"
 	EnvBangumiTVApiEndpoint = "ENV_BANGUMI_TV_API_ENDPOINT"
 	EnvTMDBToken            = "ENV_TMDB_TOKEN"
+	EnvBangumiHome          = "ENV_BANGUMI_HOME"
 
 	FlagQbEndpoint           = "qb-endpoint"
 	FlagQbUsername           = "qb-username"
@@ -30,6 +32,7 @@ const (
 	FlagDBHome               = "db-home"
 	FlagBangumiTVApiEndpoint = "bangumi-tv-api-endpoint"
 	FlagTMDBToken            = "tmdb-token"
+	FlagBangumiHome          = "bgm-home"
 )
 
 func GetRunAutoBangumiBotCmd() *cobra.Command {
@@ -65,6 +68,7 @@ func GetRunAutoBangumiBotCmd() *cobra.Command {
 	cmd.Flags().String(FlagDBHome, "/cache", "db home directory")
 	cmd.Flags().String(FlagBangumiTVApiEndpoint, "https://api.bgm.tv/v0", "bangumi tv api endpoint")
 	cmd.Flags().String(FlagTMDBToken, "", "tmdb token")
+	cmd.Flags().String(FlagBangumiHome, "/bangumi", "bangumi config home directory path")
 	return &cmd
 }
 
@@ -78,6 +82,7 @@ func loadABBotConfigFromEnv() (*bot.TGAutoBangumiBotConfig, error) {
 	config.DBDir = os.Getenv(EnvDbHome)
 	config.TMDBToken = os.Getenv(EnvTMDBToken)
 	config.BangumiTVApiEndpoint = os.Getenv(EnvBangumiTVApiEndpoint)
+	config.BangumiHome = os.Getenv(EnvBangumiHome)
 	rssUpdatePeriod := os.Getenv(EnvRSSUpdatePeriod)
 	period, err := strconv.ParseInt(rssUpdatePeriod, 10, 64)
 	if err != nil {
@@ -117,6 +122,9 @@ func loadABBotConfigFromCmdFlags(flags *pflag.FlagSet) (*bot.TGAutoBangumiBotCon
 		return nil, err
 	}
 	if config.DBDir, err = flags.GetString(FlagDBHome); err != nil {
+		return nil, err
+	}
+	if config.BangumiHome, err = flags.GetString(FlagBangumiHome); err != nil {
 		return nil, err
 	}
 	return &config, nil

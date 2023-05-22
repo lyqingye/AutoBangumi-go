@@ -31,7 +31,7 @@ func (parser *MikanRSSParser) Search(keyword string) (*bangumitypes.Bangumi, err
 	}
 	var names []string
 	for _, bgm := range result {
-		names = append(names, bgm.Title)
+		names = append(names, bgm.Info.Title)
 	}
 	matchResult := strsim.FindBestMatch(keyword, names)
 	return &result[matchResult.BestIndex], nil

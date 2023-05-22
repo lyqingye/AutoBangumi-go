@@ -81,10 +81,10 @@ func (ab *TGAutoBangumiBot) execCmdDownload(bot *TGBot, chatId int64, args []str
 	}
 
 	if strings.HasPrefix(arg, "https://mikanani.me/RSS") {
-		err := ab.autoBangumi.AddMikanRss(arg)
-		if err != nil {
-			return err
-		}
+		// err := ab.autoBangumi.AddMikanRss(arg)
+		// if err != nil {
+		// 	return err
+		// }
 		bot.sendMsg(chatId, fmt.Sprintf("success subscribe mikan rss! link: %s", arg))
 		return nil
 	}

@@ -3,3 +3,4 @@
 docker.env
 ./.vscode/*
 cache
+bangumi_cache

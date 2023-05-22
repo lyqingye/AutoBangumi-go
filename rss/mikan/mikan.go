@@ -2,9 +2,6 @@ package mikan
 
 import (
 	"encoding/xml"
-	"fmt"
-	"github.com/go-resty/resty/v2"
-	"github.com/rs/zerolog"
 	"net/url"
 	bangumitypes "pikpak-bot/bangumi"
 	"pikpak-bot/bus"
@@ -54,15 +51,15 @@ func (parser *MikanRSSParser) RssLink() string {
 
 func (parser *MikanRSSParser) Parse() ([]bangumitypes.Bangumi, error) {
 	var err error
-	mikan, err := parser.getRss()
+	mikan, err := parser.getRss(parser.rssLink)
 	if err != nil {
 		return nil, err
 	}
 	return parser.parseMikanRSS(mikan)
 }
 
-func (parser *MikanRSSParser) getRss() (*MikanRss, error) {
-	resp, err := parser.http.R().EnableTrace().Get(parser.rssLink)
+func (parser *MikanRSSParser) getRss(link string) (*MikanRss, error) {
+	resp, err := parser.http.R().EnableTrace().Get(link)
 	if err != nil {
 		return nil, err
 	}
@@ -75,45 +72,46 @@ func (parser *MikanRSSParser) getRss() (*MikanRss, error) {
 }
 
 func filterBangumi(bangumis []bangumitypes.Bangumi) {
-	for i, b := range bangumis {
-		epMap := make(map[string][]bangumitypes.Episode)
-		for _, ep := range b.Episodes {
-			if ep.EPNumber > b.EPCount {
-				continue
+	for i, bgm := range bangumis {
+		for seasonNumber, season := range bgm.Seasons {
+			epGroupByNumber := make(map[uint][]bangumitypes.Episode)
+			for _, ep := range season.Episodes {
+				if ep.Number > season.EpCount {
+					continue
+				}
+				if ep.Type != bangumitypes.EpisodeTypeNone {
+					continue
+				}
+				dupEps := epGroupByNumber[ep.Number]
+				dupEps = append(dupEps, ep)
+				epGroupByNumber[ep.Number] = dupEps
 			}
-			if ep.EpisodeType != bangumitypes.EpisodeTypeNone {
-				continue
+
+			var filteredEps []bangumitypes.Episode
+
+			for _, eps := range epGroupByNumber {
+				filteredEps = append(filteredEps, selectEpisode(eps))
 			}
-			key := fmt.Sprintf("%d-%d", ep.Season, ep.EPNumber)
-			dupEps := epMap[key]
-			dupEps = append(dupEps, ep)
-			epMap[key] = dupEps
+
+			sort.Slice(filteredEps, func(i, j int) bool {
+				return filteredEps[i].Number < filteredEps[j].Number
+			})
+
+			season.Episodes = filteredEps
+			bgm.Seasons[seasonNumber] = season
 		}
-		var processedEps []bangumitypes.Episode
-		for _, eps := range epMap {
-			if len(eps) == 1 {
-				processedEps = append(processedEps, eps[0])
-			} else {
-				// priority: resolution
-				sort.Slice(eps, func(i, j int) bool {
-					epI := eps[i].Resolution
-					epJ := eps[j].Resolution
-					langI := eps[i].Lang[0]
-					langJ := eps[j].Lang[0]
-					iDate, err1 := utils.SmartParseDate(eps[i].Date)
-					jDate, err2 := utils.SmartParseDate(eps[j].Date)
-					result := bangumitypes.ResolutionPriority[epI] > bangumitypes.ResolutionPriority[epJ] || bangumitypes.SubtitlePriority[langI] > bangumitypes.SubtitlePriority[langJ]
-					if err1 == nil && err2 == nil {
-						result = result || iDate.Unix() > jDate.Unix()
-					}
-					return result
-				})
-				processedEps = append(processedEps, eps[0])
-			}
-		}
-		sort.Slice(processedEps, func(i, j int) bool {
-			return processedEps[i].EPNumber < processedEps[j].EPNumber
+		bangumis[i] = bgm
+	}
+}
+
+func selectEpisode(episodes []bangumitypes.Episode) bangumitypes.Episode {
+	if len(episodes) == 1 {
+		return episodes[0]
+	} else {
+		// priority: resolution
+		sort.Slice(episodes, func(i, j int) bool {
+			return episodes[i].Compare(&episodes[j])
 		})
-		bangumis[i].Episodes = processedEps
+		return episodes[0]
 	}
 }
