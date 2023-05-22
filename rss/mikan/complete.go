@@ -65,35 +65,42 @@ func (parser *MikanRSSParser) completeBangumiBySearchResult(bangumi *bangumitype
 }
 
 func (parser *MikanRSSParser) mergeSeasonInfo(dest *bangumitypes.Season, source *bangumitypes.Season) {
+	if dest.SubjectId != 0 && source.SubjectId != 0 && dest.SubjectId != source.SubjectId {
+		return
+	}
+
+	if dest.MikanBangumiId != "" && source.MikanBangumiId != "" && dest.MikanBangumiId != source.MikanBangumiId {
+		return
+	}
+
+	if dest.SubjectId == 0 {
+		dest.SubjectId = source.SubjectId
+	}
+
+	if dest.MikanBangumiId == "" {
+		dest.MikanBangumiId = source.MikanBangumiId
+	}
+	if dest.EpCount == 0 {
+		dest.EpCount = source.EpCount
+	}
+	if dest.Number == 0 {
+		dest.EpCount = source.EpCount
+	}
+
 	for _, searchEpisode := range source.Episodes {
 		if dest.IsComplete(searchEpisode.Number) {
 			continue
 		}
 
-		if dest.SubjectId != 0 && source.SubjectId != 0 && dest.SubjectId != source.SubjectId {
-			continue
-		}
-
-		if dest.SubjectId == 0 {
-			dest.SubjectId = source.SubjectId
-		}
-
-		if dest.MikanBangumiId != "" && source.MikanBangumiId != "" && dest.MikanBangumiId != source.MikanBangumiId {
-			continue
-		}
-
-		if dest.MikanBangumiId == "" {
-			dest.MikanBangumiId = source.MikanBangumiId
-		}
-
 		isParsed := false
-		for i, episode := range dest.Episodes {
+		for _, episode := range dest.Episodes {
 			if episode.Number == searchEpisode.Number {
 				isParsed = true
-				if searchEpisode.Compare(&episode) {
-					dest.Episodes[i] = searchEpisode
-					break
-				}
+				// if searchEpisode.Compare(&episode) {
+				// 	dest.Episodes[i] = searchEpisode
+				// 	break
+				// }
+				break
 			}
 		}
 		if !isParsed {

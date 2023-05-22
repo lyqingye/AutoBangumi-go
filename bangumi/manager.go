@@ -51,12 +51,16 @@ func (man *BangumiManager) init() error {
 				if err == nil {
 					if bangumi.IsComplete() {
 						man.complete[bangumi.Info.Title] = bangumi
-						man.logger.Debug().Str("title", bangumi.Info.Title).Msg("init complete bangumi")
+						man.logger.Debug().Str("title", bangumi.Info.Title).Msg("load complete bangumi")
 					} else {
 						man.inComplete[bangumi.Info.Title] = bangumi
-						man.logger.Debug().Str("title", bangumi.Info.Title).Msg("init inComplete bangumi")
+						man.logger.Debug().Str("title", bangumi.Info.Title).Msg("load inComplete bangumi")
 					}
+				} else {
+					man.logger.Error().Err(err).Str("file", path).Msg("failed to load bangumi")
 				}
+			} else {
+				man.logger.Error().Err(err).Str("file", path).Msg("failed to load bangumi")
 			}
 		}
 		return nil
@@ -71,6 +75,7 @@ func (man *BangumiManager) MarkEpisodeComplete(info *BangumiInfo, seasonNum uint
 			if !season.IsComplete(episode.Number) {
 				season.Complete = append(season.Complete, episode.Number)
 				bangumi.Seasons[seasonNum] = season
+				_ = man.Flush(&bangumi)
 			}
 		}
 		if bangumi.IsComplete() {
@@ -95,7 +100,7 @@ func (man *BangumiManager) IterInCompleteBangumi(fn func(man *BangumiManager, ba
 }
 
 func (man *BangumiManager) Flush(bangumi *Bangumi) error {
-	bz, err := json.Marshal(bangumi)
+	bz, err := json.MarshalIndent(bangumi, "", "    ")
 	if err != nil {
 		return err
 	}

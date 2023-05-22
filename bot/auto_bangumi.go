@@ -84,6 +84,7 @@ func NewAutoBangumi(config *AutoBangumiConfig) (*AutoBangumi, error) {
 	}
 	bot.db = database
 	bot.rssMan = rssMan
+	bot.bgmMan = bgmMan
 	qb, err := qibittorrent.NewQbittorrentClient(config.QBEndpoint, config.QBUsername, config.QBPassword, config.QBDownloadDir)
 	if err != nil {
 		return nil, err
@@ -110,8 +111,8 @@ func (bot *AutoBangumi) HandleEvent(event bus.Event) {
 	var err error
 	switch event.EventType {
 	case bus.RSSUpdateEventType:
-		bangumi := event.Inner.(bangumi.Bangumi)
-		bot.handleBangumiUpdate(&bangumi)
+		bangumi := event.Inner.(*bangumi.Bangumi)
+		bot.handleBangumiUpdate(bangumi)
 	}
 	if err != nil {
 		bot.logger.Error().Err(err).Str("event type", event.EventType).Msg("handle event error")
@@ -200,7 +201,11 @@ func (bot *AutoBangumi) handleBangumiUpdate(bangumi *bangumi.Bangumi) {
 	for _, season := range bangumi.Seasons {
 		for _, episode := range season.ListIncompleteEpisodes() {
 			err := bot.handleEpisodeUpdate(&bangumi.Info, season.Number, episode)
-			bot.logger.Error().Err(err).Msg("handle episode update error")
+			if err != nil {
+				bot.logger.Error().Err(err).Msg("handle episode update error")
+			} else {
+				bot.logger.Info().Str("title", bangumi.Info.Title).Uint("season", season.Number).Uint("episode", episode.Number).Msg("episode update")
+			}
 		}
 	}
 }
