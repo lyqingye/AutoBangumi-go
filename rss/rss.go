@@ -46,8 +46,32 @@ func NewRSSManager(bgmMan *bangumitypes.BangumiManager, eb *bus.EventBus, db *db
 		bangumiTvClient: bangumiTVClient,
 		bgmMan:          bgmMan,
 	}
+
+	err := man.watchNewBangumi()
+	if err != nil {
+		return nil, err
+	}
 	man.ticker = time.NewTicker(period)
 	return &man, nil
+}
+
+func (man *RSSManager) watchNewBangumi() error {
+	parser, err := mikan.NewMikanRSSParser("https://mikanani.me", man.eb, man.db, man.tmdb, man.bangumiTvClient)
+	if err != nil {
+		return err
+	}
+	man.eb.SubscribeWithFn(bus.BangumiManTopic, func(event bus.Event) {
+		if event.EventType == bus.BangumiManAddNewEvent {
+			man.logger.Info().Msg("recv add new bangumi event")
+			if bangumi, ok := event.Inner.(bangumitypes.Bangumi); ok {
+				man.logger.Info().Str("titie", bangumi.Info.Title).Msg("add new bangumi")
+				man.bgmMan.GetAndLockInCompleteBangumi(bangumi.Info.Title, func(bgmMan *bangumitypes.BangumiManager, bangumi *bangumitypes.Bangumi) {
+					man.refreshBangumi(parser, bgmMan, bangumi)
+				})
+			}
+		}
+	})
+	return nil
 }
 
 func (man *RSSManager) Start() {
@@ -70,20 +94,23 @@ func (man *RSSManager) refreshInComplete() error {
 	if err != nil {
 		return err
 	}
-	eb := man.eb
-	logger := man.logger
-	man.bgmMan.IterInCompleteBangumi(func(man *bangumitypes.BangumiManager, bangumi *bangumitypes.Bangumi) bool {
-		err = parser.CompleteBangumi(bangumi)
-		if err == nil {
-			_ = man.Flush(bangumi)
-			eb.Publish(bus.RSSTopic, bus.Event{
-				EventType: bus.RSSUpdateEventType,
-				Inner:     *bangumi,
-			})
-		} else {
-			logger.Error().Err(err).Str("title", bangumi.Info.Title).Msg("complete bangumi error")
-		}
+	man.bgmMan.IterInCompleteBangumi(func(bgmMan *bangumitypes.BangumiManager, bangumi *bangumitypes.Bangumi) bool {
+		man.refreshBangumi(parser, bgmMan, bangumi)
 		return false
 	})
 	return nil
+}
+
+func (man *RSSManager) refreshBangumi(parser *mikan.MikanRSSParser, bgmMan *bangumitypes.BangumiManager, bangumi *bangumitypes.Bangumi) {
+	man.logger.Info().Str("title", bangumi.Info.Title).Msg("refresh bangumi")
+	err := parser.CompleteBangumi(bangumi)
+	if err == nil {
+		_ = bgmMan.Flush(bangumi)
+		man.eb.Publish(bus.RSSTopic, bus.Event{
+			EventType: bus.RSSUpdateEventType,
+			Inner:     *bangumi,
+		})
+	} else {
+		man.logger.Error().Err(err).Str("title", bangumi.Info.Title).Msg("complete bangumi error")
+	}
 }

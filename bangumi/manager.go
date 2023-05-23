@@ -1,6 +1,7 @@
 package bangumi
 
 import (
+	"autobangumi-go/bus"
 	"autobangumi-go/utils"
 	"encoding/json"
 	"fmt"
@@ -9,7 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/rs/zerolog"
 )
 
@@ -19,9 +22,10 @@ type BangumiManager struct {
 	complete   map[string]Bangumi
 	rwLock     sync.RWMutex
 	logger     zerolog.Logger
+	eb         *bus.EventBus
 }
 
-func NewBangumiManager(home string) (*BangumiManager, error) {
+func NewBangumiManager(home string, eb *bus.EventBus) (*BangumiManager, error) {
 	_, err := os.Stat(home)
 	if os.IsNotExist(err) {
 		err = os.MkdirAll(home, os.ModePerm)
@@ -35,8 +39,22 @@ func NewBangumiManager(home string) (*BangumiManager, error) {
 		inComplete: make(map[string]Bangumi),
 		rwLock:     sync.RWMutex{},
 		logger:     utils.GetLogger("bangumiMan"),
+		eb:         eb,
 	}
-	return &man, man.init()
+	err = man.init()
+	if err != nil {
+		return nil, err
+	}
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return nil, err
+	}
+	err = watcher.Add(home)
+	if err != nil {
+		return nil, err
+	}
+	go man.watchNewBangumiFile(watcher)
+	return &man, nil
 }
 
 func (man *BangumiManager) init() error {
@@ -67,6 +85,72 @@ func (man *BangumiManager) init() error {
 	})
 }
 
+func (man *BangumiManager) IsBangumiExist(title string) bool {
+	man.rwLock.RLock()
+	defer man.rwLock.RUnlock()
+	_, found := man.inComplete[title]
+	if found {
+		return true
+	}
+	_, found = man.complete[title]
+	return found
+}
+
+func (man *BangumiManager) AddBangumiIfNotExist(bangumi Bangumi) {
+	man.rwLock.Lock()
+	defer man.rwLock.Unlock()
+	if _, found := man.inComplete[bangumi.Info.Title]; found {
+		return
+	}
+	man.inComplete[bangumi.Info.Title] = bangumi
+
+	// publish event
+	man.eb.Publish(bus.BangumiManTopic, bus.Event{
+		EventType: bus.BangumiManAddNewEvent,
+		Inner:     bangumi,
+	})
+	man.logger.Info().Str("title", bangumi.Info.Title).Msg("load new bangumi")
+}
+
+func (man *BangumiManager) watchNewBangumiFile(watcher *fsnotify.Watcher) {
+	man.logger.Info().Msg("start bangumi file watcher")
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
+			if event.Op == fsnotify.Create {
+				if !strings.HasSuffix(event.Name, ".json") {
+					continue
+				}
+				filename := strings.ReplaceAll(event.Name, ".json", "")
+				if _, found := man.inComplete[filename]; found {
+					continue
+				}
+				time.Sleep(5 * time.Second)
+				bz, err := os.ReadFile(event.Name)
+				if err != nil {
+					man.logger.Error().Err(err).Msg("can't not be load bangumi file")
+				} else {
+					bangumi := Bangumi{}
+					if err = json.Unmarshal(bz, &bangumi); err == nil {
+						man.AddBangumiIfNotExist(bangumi)
+					} else {
+						man.logger.Error().Err(err).Msg("can't not be load bangumi file")
+					}
+				}
+			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				_ = watcher.Close()
+				return
+			}
+			man.logger.Error().Err(err).Msg("watcher err")
+		}
+	}
+}
+
 func (man *BangumiManager) MarkEpisodeComplete(info *BangumiInfo, seasonNum uint, episode Episode) {
 	man.rwLock.Lock()
 	defer man.rwLock.Unlock()
@@ -87,6 +171,23 @@ func (man *BangumiManager) MarkEpisodeComplete(info *BangumiInfo, seasonNum uint
 	}
 }
 
+func (man *BangumiManager) DownloaderTouchEpisode(info *BangumiInfo, seasonNum uint, episode Episode, downloader DownloadState) {
+	man.rwLock.Lock()
+	defer man.rwLock.Unlock()
+	if bangumi, found := man.inComplete[info.Title]; found {
+		if season, foundSeason := bangumi.Seasons[seasonNum]; foundSeason {
+			for i, ep := range season.Episodes {
+				if ep.Number == episode.Number {
+					season.Episodes[i].DownloadState = downloader
+				}
+			}
+			bangumi.Seasons[seasonNum] = season
+			_ = man.Flush(&bangumi)
+		}
+		man.inComplete[info.Title] = bangumi
+	}
+}
+
 func (man *BangumiManager) IterInCompleteBangumi(fn func(man *BangumiManager, bangumi *Bangumi) bool) {
 	man.rwLock.Lock()
 	defer man.rwLock.Unlock()
@@ -96,6 +197,15 @@ func (man *BangumiManager) IterInCompleteBangumi(fn func(man *BangumiManager, ba
 		if result {
 			break
 		}
+	}
+}
+
+func (man *BangumiManager) GetAndLockInCompleteBangumi(title string, fn func(man *BangumiManager, bangumi *Bangumi)) {
+	man.rwLock.Lock()
+	defer man.rwLock.Unlock()
+	if bangumi, ok := man.inComplete[title]; ok {
+		fn(man, &bangumi)
+		man.inComplete[title] = bangumi
 	}
 }
 

@@ -84,6 +84,13 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 		if err != nil {
 			return err
 		}
+
+		// Skip collections
+		if fromFilename.Episode.Type == bangumitypes.EpisodeTypeCollection {
+			parser.logger.Warn().Err(err).Str("title", item.Title).Msg("skip collection")
+			return nil
+		}
+
 		if fromFilename.Episode.Number == 0 {
 			parser.logger.Warn().Str("filename", item.Title).Msg("parse episode number from filename err")
 			return errors.New("parse episode number from filename err")
@@ -142,7 +149,7 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 		}
 
 		// now we get episode air date
-		subjectAirDate, err := utils.ParseDate(subject.Date)
+		subjectAirDate, err := utils.SmartParseDate(subject.Date)
 
 		var searchTitles []string
 		searchTitles = append(searchTitles, bangumiInfo.Title, subject.NameCn, subject.Name)
@@ -173,7 +180,7 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 					}
 
 					// using episode air date to predict episode season
-					seasonAriDate, err := utils.ParseDate(season.AirDate)
+					seasonAriDate, err := utils.SmartParseDate(season.AirDate)
 					if err != nil {
 						return err
 					}
@@ -364,11 +371,17 @@ func (parser *MikanRSSParser) parseEpisodeByFilename(filename string) (*ParseIte
 
 	parsedElements := anitogo.Parse(filename, anitogo.DefaultOptions)
 
-	if len(parsedElements.EpisodeNumber) > 0 {
+	if len(parsedElements.EpisodeNumber) == 1 {
 		epStr := parsedElements.EpisodeNumber[0]
 		epNumber, err := strconv.ParseUint(epStr, 10, 32)
 		if err == nil && epNumber > 0 {
 			episode.Number = uint(epNumber)
+		}
+	} else if len(parsedElements.EpisodeNumber) == 2 {
+		startEp, err1 := strconv.ParseUint(parsedElements.EpisodeNumber[0], 10, 32)
+		endEp, err2 := strconv.ParseUint(parsedElements.EpisodeNumber[1], 10, 32)
+		if err1 == nil && err2 == nil && startEp > 0 && endEp > startEp {
+			episode.Type = bangumitypes.EpisodeTypeCollection
 		}
 	}
 

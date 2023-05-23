@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"io/ioutil"
 	"testing"
+	"time"
 
 	"github.com/anacrolix/torrent/bencode"
 	torrent "github.com/anacrolix/torrent/metainfo"
@@ -51,8 +52,10 @@ func TestListTorrent(t *testing.T) {
 	require.NotNil(t, qb)
 	err = qb.Login()
 	require.NoError(t, err)
-	list, err := qb.ListAllTorrent(qibittorrent.FilterAllTorrentList)
+	list, err := qb.ListAllTorrent(qibittorrent.FilterStalledDownloadingTorrentList)
 	for _, torrent := range list {
+		addTime := time.Unix(int64(torrent.AddedOn),0)
+		println(addTime.String())
 		t.Log(torrent.Hash)
 	}
 	require.NoError(t, err)

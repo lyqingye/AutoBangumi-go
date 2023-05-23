@@ -35,3 +35,32 @@ func TestSearchSubjec3t(t *testing.T) {
 	require.NotNil(t, subject)
 	t.Log(subject.GetAliasNames())
 }
+
+func TestMe(t *testing.T) {
+	bangumiTVClient, err := mdb.NewBangumiTVClient("https://api.bgm.tv/v0")
+	require.NoError(t, err)
+	require.NotNil(t, bangumiTVClient)
+	meInfo, err := bangumiTVClient.Me()
+	require.NoError(t, err)
+	require.NotNil(t, meInfo)
+}
+
+func TestCollections(t *testing.T) {
+	bangumiTVClient, err := mdb.NewBangumiTVClient("https://api.bgm.tv/v0")
+	require.NoError(t, err)
+	require.NotNil(t, bangumiTVClient)
+	err = bangumiTVClient.SetAccessToken("")
+	require.NoError(t, err)
+	collections, err := bangumiTVClient.Collections(mdb.CollectionTypeDoing, mdb.SubjectTypeAnime)
+	require.NoError(t, err)
+	require.NotNil(t, collections)
+}
+
+func TestGetCalendar(t *testing.T) {
+	bangumiTVClient, err := mdb.NewBangumiTVClient("https://api.bgm.tv/v0")
+	require.NoError(t, err)
+	require.NotNil(t, bangumiTVClient)
+	calendar, err := bangumiTVClient.GetCalendar()
+	require.NoError(t, err)
+	require.NotNil(t, calendar)
+}

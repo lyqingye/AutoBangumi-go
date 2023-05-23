@@ -78,8 +78,8 @@ func TestMikanCompleteBangumi(t *testing.T) {
 	require.NoError(t, err)
 	bangumi := bangumitypes.Bangumi{
 		Info: bangumitypes.BangumiInfo{
-			Title:  "异世界归来的舅舅",
-			TmDBId: 127714,
+			Title:  "【我推的孩子】",
+			TmDBId: 203737,
 		},
 	}
 	err = parser.CompleteBangumi(&bangumi)
@@ -111,4 +111,8 @@ func normalizationSearchTitle(keyword string) string {
 		keyword = strings.ReplaceAll(keyword, re.FindString(keyword), "")
 	}
 	return keyword
+}
+
+func TestCollectionRegexp(t *testing.T) {
+
 }

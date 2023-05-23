@@ -22,9 +22,7 @@ const (
 	EpisodeTypeCollection = "Collection"
 	EpisodeTypeUnknown    = "unknown"
 
-	EpisodeStateParsed   = "parsed"
-	EpisodeStateParseErr = "error"
-	EpisodeStateDownload = "download"
+	NoDownloader = "None"
 )
 
 var (
@@ -107,7 +105,18 @@ type Episode struct {
 	SubtitleLang   []string  `json:"subtitleLang"`
 	Resolution     string    `json:"resolution"`
 	Type           string    `json:"episodeType"`
-	State          string    `json:"state"`
+
+	// modify my downloader
+	DownloadState DownloadState `json:"downloadState"`
+}
+
+func (e *Episode) IsNeedToDownload() bool {
+	return e.DownloadState.Downloader == "" && e.DownloadState.TaskId == ""
+}
+
+type DownloadState struct {
+	Downloader string `json:"downloader"`
+	TaskId     string `json:"taskId"`
 }
 
 func (e *Episode) Compare(o *Episode) bool {

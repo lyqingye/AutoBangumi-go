@@ -16,6 +16,7 @@ type TGBot struct {
 	bot      *tgbotapi.BotAPI
 	sessions *utils.SimpleTTLCache
 	listener TGBotListener
+	chatId   int64
 }
 
 func NewTGBot(token string, listener TGBotListener) (*TGBot, error) {
@@ -35,10 +36,12 @@ func (t *TGBot) Run() {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 	updates := t.bot.GetUpdatesChan(u)
-
 	for update := range updates {
 		msg := update.Message
 		if msg != nil {
+			if msg.Chat != nil {
+				t.chatId = msg.Chat.ID
+			}
 			t.listener.OnMessage(t, msg)
 		}
 		cq := update.CallbackQuery
@@ -48,17 +51,12 @@ func (t *TGBot) Run() {
 	}
 }
 
-func (t *TGBot) sendMsg(chatId int64, msg string) (tgbotapi.Message, error) {
-	out := tgbotapi.NewMessage(chatId, msg)
+func (t *TGBot) sendMsg(msg string) (tgbotapi.Message, error) {
+	out := tgbotapi.NewMessage(t.chatId, msg)
 	return t.bot.Send(out)
 }
 
-func (t *TGBot) sendMsgNoResult(chatId int64, msg string) {
-	out := tgbotapi.NewMessage(chatId, msg)
+func (t *TGBot) sendMsgNoResult(msg string) {
+	out := tgbotapi.NewMessage(t.chatId, msg)
 	_, _ = t.bot.Send(out)
-}
-
-func (t *TGBot) sendMsg2(msg tgbotapi.MessageConfig) error {
-	_, err := t.bot.Send(msg)
-	return err
 }

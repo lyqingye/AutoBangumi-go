@@ -22,6 +22,10 @@ const (
 	EnvBangumiTVApiEndpoint = "ENV_BANGUMI_TV_API_ENDPOINT"
 	EnvTMDBToken            = "ENV_TMDB_TOKEN"
 	EnvBangumiHome          = "ENV_BANGUMI_HOME"
+	EnvAria2WsUrl           = "ENV_ARIA2_WS_URL"
+	EnvAria2Secret          = "ENV_ARIA2_SECRET"
+	EnvAria2DownloadDir     = "ENV_ARIA2_DOWNLOAD_DIR"
+	EnvPikpakConfigPath     = "ENV_PIKPAK_CONFIG_PATH"
 
 	FlagQbEndpoint           = "qb-endpoint"
 	FlagQbUsername           = "qb-username"
@@ -33,6 +37,10 @@ const (
 	FlagBangumiTVApiEndpoint = "bangumi-tv-api-endpoint"
 	FlagTMDBToken            = "tmdb-token"
 	FlagBangumiHome          = "bgm-home"
+	FlagAria2WsUrl           = "aria2-ws"
+	FlagAria2Secret          = "aria2-secret"
+	FlagAria2DownloadDir     = "aria2-dir"
+	FlagPikpakConfigPath     = "pikpak-config-path"
 )
 
 func GetRunAutoBangumiBotCmd() *cobra.Command {
@@ -64,11 +72,15 @@ func GetRunAutoBangumiBotCmd() *cobra.Command {
 	cmd.Flags().String(FlagQbPassword, "adminadmin", "qb password")
 	cmd.Flags().Int64(FlagRssUpdatePeriod, 3600, "rss update period seconds")
 	cmd.Flags().String(FlagTGBotToken, "", "telegram bot token")
-	cmd.Flags().String(FlagDownloadDir, "/downloads", "download directory path")
+	cmd.Flags().String(FlagDownloadDir, "/downloads", "qb download directory path")
 	cmd.Flags().String(FlagDBHome, "/cache", "db home directory")
 	cmd.Flags().String(FlagBangumiTVApiEndpoint, "https://api.bgm.tv/v0", "bangumi tv api endpoint")
 	cmd.Flags().String(FlagTMDBToken, "", "tmdb token")
 	cmd.Flags().String(FlagBangumiHome, "/bangumi", "bangumi config home directory path")
+	cmd.Flags().String(FlagAria2WsUrl, "ws://nas.lyqingye.com:8888", "aria2 websocket url")
+	cmd.Flags().String(FlagAria2Secret, "", "aria2 secret")
+	cmd.Flags().String(FlagAria2DownloadDir, "/downloads", "aria2 download directory path")
+	cmd.Flags().String(FlagPikpakConfigPath, "/pikpak.json", "pikpak config file path")
 	return &cmd
 }
 
@@ -89,6 +101,10 @@ func loadABBotConfigFromEnv() (*bot.TGAutoBangumiBotConfig, error) {
 		return nil, err
 	}
 	config.RSSUpdatePeriod = time.Second * time.Duration(period)
+	config.Aria2WsUrl = os.Getenv(EnvAria2WsUrl)
+	config.Aria2Secret = os.Getenv(EnvAria2Secret)
+	config.Aria2DownloadDir = os.Getenv(EnvAria2DownloadDir)
+	config.PikPakConfigPath = os.Getenv(EnvPikpakConfigPath)
 	return &config, nil
 }
 
@@ -125,6 +141,18 @@ func loadABBotConfigFromCmdFlags(flags *pflag.FlagSet) (*bot.TGAutoBangumiBotCon
 		return nil, err
 	}
 	if config.BangumiHome, err = flags.GetString(FlagBangumiHome); err != nil {
+		return nil, err
+	}
+	if config.Aria2WsUrl, err = flags.GetString(FlagAria2WsUrl); err != nil {
+		return nil, err
+	}
+	if config.Aria2Secret, err = flags.GetString(FlagAria2Secret); err != nil {
+		return nil, err
+	}
+	if config.Aria2DownloadDir, err = flags.GetString(FlagAria2DownloadDir); err != nil {
+		return nil, err
+	}
+	if config.PikPakConfigPath, err = flags.GetString(FlagPikpakConfigPath); err != nil {
 		return nil, err
 	}
 	return &config, nil

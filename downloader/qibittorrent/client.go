@@ -128,6 +128,7 @@ func (qb *QbittorrentClient) ListAllTorrent(filter string) ([]Torrent, error) {
 		if len(list) < limit {
 			break
 		}
+		offset = offset + len(list)
 	}
 	return torrentList, nil
 }
@@ -274,18 +275,28 @@ func (qb *QbittorrentClient) GetTorrentContent(hash string, indexes []int64) ([]
 	return contents, nil
 }
 
-func (qb *QbittorrentClient) WaitForDownloadComplete(hash string, period time.Duration, callback func() bool) {
+func (qb *QbittorrentClient) WaitForDownloadComplete(hash string, period time.Duration, callback func() bool) error {
+	return qb.WatchTorrent(hash, period, func(torr *Torrent) bool {
+		if torr.CompletionOn != 0 {
+			return callback()
+		}
+		return false
+	})
+}
+
+func (qb *QbittorrentClient) WatchTorrent(hash string, period time.Duration, callback func(torr *Torrent) bool) error {
 	ticker := time.NewTicker(period)
 	for range ticker.C {
 		torr, err := qb.GetTorrent(hash)
 		if err == nil {
-			if torr.CompletionOn != 0 {
-				if callback() {
-					break
-				}
+			if callback(torr) {
+				break
 			}
+		} else if err == ErrTorrentNotFound {
+			return err
 		}
 	}
+	return nil
 }
 
 func respToErr(resp []byte) error {
