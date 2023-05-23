@@ -68,6 +68,10 @@ func (parser *MikanRSSParser) searchTMDB(keyword string) (*tmdb.TVDetails, error
 	}
 }
 
+func (parser *MikanRSSParser) getTMDB(tmdbID int64) (*tmdb.TVDetails, error) {
+	return parser.tmdb.GetTVDetailById(tmdbID)
+}
+
 func normalizationSearchTitle(keyword string) string {
 	patterns := []string{
 		"第([[:digit:]]+|\\p{Han}+)季",

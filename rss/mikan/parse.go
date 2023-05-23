@@ -73,7 +73,7 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 
 		// Parse Episode from filename, result information is unreliable
 		// - BangumiTitle (nullable)
-		// - Eposide Number (nullable)
+		// - Episode Number (nullable)
 		// - Season Number (nullable)
 		// - Lang (nullable)
 		// - Resolution (nullable)
@@ -113,14 +113,14 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 		mikanBangumiId = cache.MikanBangumiId
 	}
 
-	// Try predict Episode season number using bangumi TV and tmdb
+	// Try to predict Episode season number using bangumi TV and tmdb
 	// 1. get air date from bangumi tv
 	// 2. get seasons from tmdb
 	// 3. using air data to predict season number
 	//
 	if subjectId == 0 || seasonNumber == 0 {
 		// the subject id comes from parsing item link page
-		// if the subgroup does not have a link associated with bangumitv when publishing resources
+		// if the subgroup does not have a link associated with bangumi-tv when publishing resources
 		// then we will try searching based on the title
 		var subject *mdb.Subjects
 		if subjectId != 0 {
@@ -258,7 +258,7 @@ func (parser *MikanRSSParser) parseEpisodeByItem(link string) (*ParseItemResult,
 	bangumi := bangumitypes.BangumiInfo{}
 	episode := bangumitypes.Episode{}
 
-	resp, err := parser.http.R().EnableTrace().Get(link)
+	resp, err := parser.http.R().Get(link)
 	if err != nil {
 		return nil, err
 	}
@@ -380,6 +380,8 @@ func (parser *MikanRSSParser) parseEpisodeByFilename(filename string) (*ParseIte
 		}
 	}
 
+	episode.Subgroup = parsedElements.ReleaseGroup
+
 	if len(parsedElements.Language) > 0 {
 		for _, l := range parsedElements.Language {
 			episode.SubtitleLang = append(episode.SubtitleLang, normalizationLang(l))
@@ -403,10 +405,10 @@ func (parser *MikanRSSParser) parseEpisodeByFilename(filename string) (*ParseIte
 			}
 		}
 	}
-
-	if len(episode.SubtitleLang) != 0 {
+	if len(episode.SubtitleLang) == 0 {
 		episode.SubtitleLang = append(episode.SubtitleLang, bangumitypes.SubtitleUnknown)
 	}
+	episode.SubtitleLang = utils.RemoveDuplicate(episode.SubtitleLang)
 
 	if len(parsedElements.AnimeType) == 0 {
 		episode.Type = bangumitypes.EpisodeTypeNone
@@ -414,9 +416,6 @@ func (parser *MikanRSSParser) parseEpisodeByFilename(filename string) (*ParseIte
 		episode.Type = normalizationEpisodeType(parsedElements.AnimeType[0])
 	}
 
-	if len(episode.SubtitleLang) == 0 {
-		episode.SubtitleLang = []string{bangumitypes.SubtitleUnknown}
-	}
 	episode.Resolution = normalizationResolution(parsedElements.VideoResolution)
 
 	if parsedElements.AnimeTitle != "" {

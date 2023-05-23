@@ -3,6 +3,7 @@ package mikan
 import (
 	"errors"
 	"fmt"
+	tmdb "github.com/cyruzin/golang-tmdb"
 	bangumitypes "pikpak-bot/bangumi"
 )
 
@@ -12,30 +13,39 @@ func (parser *MikanRSSParser) CompleteBangumi(bangumi *bangumitypes.Bangumi) err
 		return errors.New("empty bangumi title")
 	}
 
+	var tv *tmdb.TVDetails
+	var err error
 	if info.TmDBId == 0 {
-		tv, err := parser.searchTMDB(info.Title)
+		tv, err = parser.searchTMDB(info.Title)
 		if err != nil {
 			return err
 		}
-		bangumi.Info.TmDBId = tv.ID
-		if len(bangumi.Seasons) == 0 {
-			bangumi.Seasons = make(map[uint]bangumitypes.Season)
+	} else {
+		tv, err = parser.getTMDB(info.TmDBId)
+		if err != nil {
+			return err
 		}
+	}
 
-		for _, season := range tv.Seasons {
-			if season.SeasonNumber == 0 {
-				continue
-			}
-			existsSeason := bangumi.Seasons[uint(season.SeasonNumber)]
-			existsSeason.Number = uint(season.SeasonNumber)
-			existsSeason.EpCount = uint(season.EpisodeCount)
-			bangumi.Seasons[uint(season.SeasonNumber)] = existsSeason
+	bangumi.Info.TmDBId = tv.ID
+
+	// complete season info
+	if len(bangumi.Seasons) == 0 {
+		bangumi.Seasons = make(map[uint]bangumitypes.Season)
+	}
+	for _, season := range tv.Seasons {
+		if season.SeasonNumber == 0 {
+			continue
 		}
+		existsSeason := bangumi.Seasons[uint(season.SeasonNumber)]
+		existsSeason.Number = uint(season.SeasonNumber)
+		existsSeason.EpCount = uint(season.EpisodeCount)
+		bangumi.Seasons[uint(season.SeasonNumber)] = existsSeason
 	}
 
 	for _, season := range bangumi.Seasons {
 		if season.MikanBangumiId != "" {
-			err := parser.completeSeasonByMikanBangumiId(info, &season)
+			err = parser.completeSeasonByMikanBangumiId(info, &season)
 			if err != nil {
 				continue
 			}
