@@ -1,9 +1,9 @@
 package qibittorrent_test
 
 import (
+	"autobangumi-go/downloader/qibittorrent"
 	"bytes"
 	"io/ioutil"
-	"pikpak-bot/downloader/qibittorrent"
 	"testing"
 
 	"github.com/anacrolix/torrent/bencode"

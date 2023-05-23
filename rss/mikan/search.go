@@ -1,10 +1,10 @@
 package mikan
 
 import (
+	bangumitypes "autobangumi-go/bangumi"
+	"autobangumi-go/mdb"
 	"encoding/xml"
 	"fmt"
-	bangumitypes "pikpak-bot/bangumi"
-	"pikpak-bot/mdb"
 	"regexp"
 	"strings"
 

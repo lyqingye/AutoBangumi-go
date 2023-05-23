@@ -1,7 +1,7 @@
 package bus_test
 
 import (
-	"pikpak-bot/bus"
+	"autobangumi-go/bus"
 	"testing"
 	"time"
 )

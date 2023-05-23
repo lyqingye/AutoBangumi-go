@@ -1,4 +1,4 @@
-module pikpak-bot
+module autobangumi-go
 
 go 1.20
 

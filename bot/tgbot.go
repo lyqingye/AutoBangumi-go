@@ -1,7 +1,7 @@
 package bot
 
 import (
-	"pikpak-bot/utils"
+	"autobangumi-go/utils"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"

@@ -1,7 +1,7 @@
 package mdb_test
 
 import (
-	"pikpak-bot/mdb"
+	"autobangumi-go/mdb"
 	"testing"
 
 	"github.com/stretchr/testify/require"

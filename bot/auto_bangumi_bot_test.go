@@ -1,8 +1,8 @@
 package bot_test
 
 import (
+	"autobangumi-go/bot"
 	"github.com/stretchr/testify/require"
-	"pikpak-bot/bot"
 	"testing"
 	"time"
 )

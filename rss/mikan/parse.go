@@ -1,13 +1,13 @@
 package mikan
 
 import (
+	bangumitypes "autobangumi-go/bangumi"
+	"autobangumi-go/mdb"
+	"autobangumi-go/utils"
 	"bytes"
 	"errors"
 	"fmt"
 	"math"
-	bangumitypes "pikpak-bot/bangumi"
-	"pikpak-bot/mdb"
-	"pikpak-bot/utils"
 	"regexp"
 	"strconv"
 	"strings"
@@ -449,12 +449,12 @@ func (parser *MikanRSSParser) parseMikanRSS(mikan *MikanRss) ([]bangumitypes.Ban
 }
 
 func normalizationResolution(resolution string) string {
-	switch resolution {
-	case "2160P", "2160p":
+	switch strings.ToLower(resolution) {
+	case "2160p":
 		return bangumitypes.Resolution2160p
-	case "1080P", "1080p", "1920x1080", "1920X1080":
+	case "1080p", "1920x1080":
 		return bangumitypes.Resolution1080p
-	case "720P", "720p", "1024x720", "1280x720":
+	case "720p", "1024x720", "1280x720":
 		return bangumitypes.Resolution720p
 	default:
 		return bangumitypes.ResolutionUnknown

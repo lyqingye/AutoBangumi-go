@@ -1,8 +1,8 @@
 package main
 
 import (
+	"autobangumi-go/cmd"
 	"os"
-	"pikpak-bot/cmd"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"

@@ -1,8 +1,8 @@
 package cmd
 
 import (
+	"autobangumi-go/bot"
 	"os"
-	"pikpak-bot/bot"
 	"strconv"
 	"time"
 

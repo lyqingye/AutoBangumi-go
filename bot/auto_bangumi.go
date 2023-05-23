@@ -1,15 +1,15 @@
 package bot
 
 import (
+	"autobangumi-go/bangumi"
+	"autobangumi-go/bus"
+	"autobangumi-go/db"
+	"autobangumi-go/downloader/qibittorrent"
+	"autobangumi-go/mdb"
+	"autobangumi-go/rss"
+	"autobangumi-go/utils"
 	"errors"
 	"net/url"
-	"pikpak-bot/bangumi"
-	"pikpak-bot/bus"
-	"pikpak-bot/db"
-	"pikpak-bot/downloader/qibittorrent"
-	"pikpak-bot/mdb"
-	"pikpak-bot/rss"
-	"pikpak-bot/utils"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -111,8 +111,8 @@ func (bot *AutoBangumi) HandleEvent(event bus.Event) {
 	var err error
 	switch event.EventType {
 	case bus.RSSUpdateEventType:
-		bangumi := event.Inner.(*bangumi.Bangumi)
-		bot.handleBangumiUpdate(bangumi)
+		bgm := event.Inner.(bangumi.Bangumi)
+		bot.handleBangumiUpdate(&bgm)
 	}
 	if err != nil {
 		bot.logger.Error().Err(err).Str("event type", event.EventType).Msg("handle event error")

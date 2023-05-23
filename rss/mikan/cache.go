@@ -1,7 +1,7 @@
 package mikan
 
 import (
-	"pikpak-bot/mdb"
+	"autobangumi-go/mdb"
 	"strconv"
 )
 
@@ -13,7 +13,6 @@ var (
 	KeyBangumiTVCacheBySubjectId    = []byte("bangumiTV-cache-subject-id")
 	KeyBangumiTVCacheByKeyword      = []byte("bangumiTV-cache-keyword")
 	KeyTMDBCacheByKeyword           = []byte("TMDB-cache-keyword")
-	KeyBlackItemLink                = []byte("mikan-black-item")
 	KeyMikanBangumiToBangumiTvCache = []byte("mikan-bangumi-to-bangumi-tv-cache")
 )
 
@@ -31,10 +30,6 @@ func getBangumiTVCacheKeyByKeyword(keyword string) []byte {
 
 func getTMDBCacheByKeyword(keyword string) []byte {
 	return append(KeyTMDBCacheByKeyword, []byte(keyword)...)
-}
-
-func getBlackItemLinkKey(itemLink string) []byte {
-	return append(KeyBlackItemLink, []byte(itemLink)...)
 }
 
 func getMikanBangumiToBangumiTVCache(mikanBangumiId string) []byte {
@@ -55,18 +50,6 @@ func (parser *MikanRSSParser) storeParseCache(itemLink string, cache *ParseItemR
 	if err != nil {
 		parser.logger.Err(err).Msg("store parse cache error")
 	}
-}
-
-func (parser *MikanRSSParser) blackItemLink(itemLink string) {
-	err := parser.db.Set(getBlackItemLinkKey(itemLink), nil)
-	if err != nil {
-		parser.logger.Err(err).Msg("black item link error")
-	}
-}
-
-func (parser *MikanRSSParser) isBlackItemLink(itemLink string) bool {
-	found, err := parser.db.Has(getBlackItemLinkKey(itemLink))
-	return found && err == nil
 }
 
 func (parser *MikanRSSParser) getBangumiTVSubject(subjectId int64) (*mdb.Subjects, error) {

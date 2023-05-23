@@ -1,13 +1,13 @@
 package mikan
 
 import (
+	bangumitypes "autobangumi-go/bangumi"
+	"autobangumi-go/bus"
+	"autobangumi-go/db"
+	"autobangumi-go/mdb"
+	"autobangumi-go/utils"
 	"encoding/xml"
 	"net/url"
-	bangumitypes "pikpak-bot/bangumi"
-	"pikpak-bot/bus"
-	"pikpak-bot/db"
-	"pikpak-bot/mdb"
-	"pikpak-bot/utils"
 	"sort"
 
 	"github.com/go-resty/resty/v2"

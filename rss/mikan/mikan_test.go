@@ -1,16 +1,16 @@
 package mikan_test
 
 import (
+	"autobangumi-go/bus"
+	"autobangumi-go/db"
+	"autobangumi-go/mdb"
+	"autobangumi-go/rss/mikan"
 	"os"
-	"pikpak-bot/bus"
-	"pikpak-bot/db"
-	"pikpak-bot/mdb"
-	"pikpak-bot/rss/mikan"
 	"regexp"
 	"strings"
 	"testing"
 
-	bangumitypes "pikpak-bot/bangumi"
+	bangumitypes "autobangumi-go/bangumi"
 
 	"github.com/stretchr/testify/require"
 )

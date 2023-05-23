@@ -1,21 +1,16 @@
 package rss
 
 import (
-	bangumitypes "pikpak-bot/bangumi"
-	"pikpak-bot/bus"
-	"pikpak-bot/db"
-	"pikpak-bot/mdb"
-	"pikpak-bot/rss/mikan"
-	"pikpak-bot/utils"
+	bangumitypes "autobangumi-go/bangumi"
+	"autobangumi-go/bus"
+	"autobangumi-go/db"
+	"autobangumi-go/mdb"
+	"autobangumi-go/rss/mikan"
+	"autobangumi-go/utils"
 	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
-)
-
-var (
-	KeyRSSLink          = []byte("rss-links")
-	KeyRSSSubscribeInfo = []byte("rss-subscribe")
 )
 
 type SubscribeInfo struct {
@@ -83,7 +78,7 @@ func (man *RSSManager) refreshInComplete() error {
 			_ = man.Flush(bangumi)
 			eb.Publish(bus.RSSTopic, bus.Event{
 				EventType: bus.RSSUpdateEventType,
-				Inner:     bangumi,
+				Inner:     *bangumi,
 			})
 		} else {
 			logger.Error().Err(err).Str("title", bangumi.Info.Title).Msg("complete bangumi error")

@@ -1,12 +1,12 @@
 package bangumi
 
 import (
+	"autobangumi-go/utils"
 	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"pikpak-bot/utils"
 	"strings"
 	"sync"
 

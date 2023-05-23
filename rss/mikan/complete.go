@@ -1,10 +1,10 @@
 package mikan
 
 import (
+	bangumitypes "autobangumi-go/bangumi"
 	"errors"
 	"fmt"
 	tmdb "github.com/cyruzin/golang-tmdb"
-	bangumitypes "pikpak-bot/bangumi"
 )
 
 func (parser *MikanRSSParser) CompleteBangumi(bangumi *bangumitypes.Bangumi) error {
@@ -106,10 +106,6 @@ func (parser *MikanRSSParser) mergeSeasonInfo(dest *bangumitypes.Season, source 
 		for _, episode := range dest.Episodes {
 			if episode.Number == searchEpisode.Number {
 				isParsed = true
-				// if searchEpisode.Compare(&episode) {
-				// 	dest.Episodes[i] = searchEpisode
-				// 	break
-				// }
 				break
 			}
 		}

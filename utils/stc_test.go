@@ -1,7 +1,7 @@
 package utils_test
 
 import (
-	"pikpak-bot/utils"
+	"autobangumi-go/utils"
 	"testing"
 	"time"
 
