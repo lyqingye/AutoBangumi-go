@@ -52,7 +52,7 @@ func (parser *MikanRSSParser) RssLink() string {
 	return parser.rssLink
 }
 
-func (parser *MikanRSSParser) Parse() ([]bangumitypes.Bangumi, error) {
+func (parser *MikanRSSParser) Parse() ([]*bangumitypes.Bangumi, error) {
 	var err error
 	mikan, err := parser.getRss(parser.rssLink)
 	if err != nil {
@@ -74,36 +74,38 @@ func (parser *MikanRSSParser) getRss(link string) (*MikanRss, error) {
 	return &rssContent, nil
 }
 
-func filterBangumi(bangumis []bangumitypes.Bangumi) {
-	for i, bgm := range bangumis {
-		for seasonNumber, season := range bgm.Seasons {
-			epGroupByNumber := make(map[uint][]bangumitypes.Episode)
-			for _, ep := range season.Episodes {
-				if ep.Number > season.EpCount {
-					continue
-				}
-				if ep.Type != bangumitypes.EpisodeTypeNone {
-					continue
-				}
-				dupEps := epGroupByNumber[ep.Number]
-				dupEps = append(dupEps, ep)
-				epGroupByNumber[ep.Number] = dupEps
+func filterEpisodes(bgm *bangumitypes.Bangumi) {
+	for seasonNumber, season := range bgm.Seasons {
+		epGroupByNumber := make(map[uint][]bangumitypes.Episode)
+		for _, ep := range season.Episodes {
+			if ep.Number > season.EpCount {
+				continue
 			}
-
-			var filteredEps []bangumitypes.Episode
-
-			for _, eps := range epGroupByNumber {
-				filteredEps = append(filteredEps, selectEpisode(eps))
+			if ep.Type != bangumitypes.EpisodeTypeNone {
+				continue
 			}
-
-			sort.Slice(filteredEps, func(i, j int) bool {
-				return filteredEps[i].Number < filteredEps[j].Number
-			})
-
-			season.Episodes = filteredEps
-			bgm.Seasons[seasonNumber] = season
+			dupEps := epGroupByNumber[ep.Number]
+			dupEps = append(dupEps, ep)
+			epGroupByNumber[ep.Number] = dupEps
 		}
-		bangumis[i] = bgm
+
+		var filteredEps []bangumitypes.Episode
+
+		for _, eps := range epGroupByNumber {
+			filteredEps = append(filteredEps, selectEpisode(eps))
+		}
+
+		sort.Slice(filteredEps, func(i, j int) bool {
+			return filteredEps[i].Number < filteredEps[j].Number
+		})
+		season.Episodes = filteredEps
+		bgm.Seasons[seasonNumber] = season
+	}
+}
+
+func filterBangumi(bangumis []*bangumitypes.Bangumi) {
+	for _, bgm := range bangumis {
+		filterEpisodes(bgm)
 	}
 }
 

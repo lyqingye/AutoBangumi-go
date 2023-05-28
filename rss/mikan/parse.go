@@ -15,7 +15,6 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	torrent "github.com/anacrolix/torrent/metainfo"
-	"github.com/dustin/go-humanize"
 	"github.com/nssteinbrenner/anitogo"
 )
 
@@ -41,10 +40,6 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 	cache, found := parser.getParseCache(item.Link)
 	if !found {
 		// Episode information from rss item
-		fileSize, err := humanize.ParseBytes(item.Torrent.ContentLength)
-		if err == nil {
-			episode.FileSize = fileSize
-		}
 		episode.RawFilename = item.Title
 		pubDate, err := utils.SmartParseDate(item.Torrent.PubDate)
 		if err != nil {
@@ -59,6 +54,7 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 		// - Torrent
 		// - TorrentHash
 		// - Magnet
+		// - FileSize
 		fromWebPage, err := parser.parseEpisodeByItem(item.Link)
 		if err != nil {
 			parser.logger.Warn().Err(err).Str("link", item.Link).Str("title", item.Title).Msg("parse episode error")
@@ -68,6 +64,7 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 		episode.Magnet = fromWebPage.Episode.Magnet
 		episode.Torrent = fromWebPage.Episode.Torrent
 		episode.TorrentHash = fromWebPage.Episode.TorrentHash
+		episode.FileSize = fromWebPage.Episode.FileSize
 		mikanBangumiId = fromWebPage.MikanBangumiId
 		subjectId = fromWebPage.SubjectId
 
@@ -176,6 +173,11 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 					// NOTE:
 					// If season number is 0 , then the season maybe a Special or TV
 					if season.SeasonNumber == 0 {
+						continue
+					}
+
+					// the season is not air
+					if season.AirDate == "" {
 						continue
 					}
 
@@ -300,6 +302,23 @@ func (parser *MikanRSSParser) parseEpisodeByItem(link string) (*ParseItemResult,
 						return nil, err
 					}
 					episode.Torrent = resp.Body()
+					torr, err := torrent.Load(bytes.NewBuffer(episode.Torrent))
+					if err != nil {
+						return nil, err
+					}
+					info, err := torr.UnmarshalInfo()
+					if err != nil {
+						return nil, err
+					}
+					var torrentFilesSize int64
+					for _, fi := range info.Files {
+						torrentFilesSize += fi.Length
+					}
+					if torrentFilesSize > info.Length {
+						episode.FileSize = uint64(torrentFilesSize)
+					} else {
+						episode.FileSize = uint64(info.Length)
+					}
 				}
 				if strings.HasPrefix(attr.Val, "magnet:?xt") {
 					episode.Magnet = attr.Val
@@ -442,7 +461,7 @@ func (parser *MikanRSSParser) parseEpisodeByFilename(filename string) (*ParseIte
 	}, nil
 }
 
-func (parser *MikanRSSParser) parseMikanRSS(mikan *MikanRss) ([]bangumitypes.Bangumi, error) {
+func (parser *MikanRSSParser) parseMikanRSS(mikan *MikanRss) ([]*bangumitypes.Bangumi, error) {
 	bangumiMap := make(map[int64]*bangumitypes.Bangumi)
 	for i, item := range mikan.Channel.Item {
 		if item.Link != "" {
@@ -453,9 +472,9 @@ func (parser *MikanRSSParser) parseMikanRSS(mikan *MikanRss) ([]bangumitypes.Ban
 			}
 		}
 	}
-	var bangumis []bangumitypes.Bangumi
+	var bangumis []*bangumitypes.Bangumi
 	for _, bangumi := range bangumiMap {
-		bangumis = append(bangumis, *bangumi)
+		bangumis = append(bangumis, bangumi)
 	}
 	filterBangumi(bangumis)
 	return bangumis, nil

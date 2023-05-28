@@ -143,9 +143,82 @@ func (client *BangumiTVClient) SearchAnime(keyword string) (*Subjects, error) {
 		if subject.NameCn == keyword || subject.Name == keyword {
 			return client.GetSubjects(subject.ID)
 		}
+
 		subjects = append(subjects, subject)
 		names = append(names, subject.Name)
 		names = append(names, subject.NameCn)
+	}
+	matchResult := strsim.FindBestMatch(keyword, names)
+
+	for _, subject := range subjects {
+		if subject.NameCn == matchResult.Match.S || subject.Name == matchResult.Match.S {
+			return client.GetSubjects(subject.ID)
+		}
+	}
+
+	return client.GetSubjects(subjects[0].ID)
+}
+
+type ListResponse struct {
+	Results int           `json:"results"`
+	List    []SubjectItem `json:"list"`
+}
+
+type SubjectItem struct {
+	ID         int64  `json:"id"`
+	URL        string `json:"url"`
+	Type       int    `json:"type"`
+	Name       string `json:"name"`
+	NameCn     string `json:"name_cn"`
+	Summary    string `json:"summary"`
+	Eps        int    `json:"eps,omitempty"`
+	EpsCount   int    `json:"eps_count,omitempty"`
+	AirDate    string `json:"air_date"`
+	AirWeekday int    `json:"air_weekday"`
+	Images     struct {
+		Large  string `json:"large"`
+		Common string `json:"common"`
+		Medium string `json:"medium"`
+		Small  string `json:"small"`
+		Grid   string `json:"grid"`
+	} `json:"images"`
+	Collection struct {
+		Wish    int `json:"wish"`
+		Collect int `json:"collect"`
+		Doing   int `json:"doing"`
+		OnHold  int `json:"on_hold"`
+		Dropped int `json:"dropped"`
+	} `json:"collection"`
+}
+
+func (client *BangumiTVClient) SearchAnime2(keyword string) (*Subjects, error) {
+	host := strings.ReplaceAll(client.endpoint.String(), client.endpoint.Path, "")
+	apiUrl := host + "/search/subject/" + url.QueryEscape(keyword)
+
+	queryParams := map[string]string{
+		"max_results":   "10",
+		"start":         "0",
+		"type":          strconv.FormatInt(SubjectTypeAnime, 10),
+		"responseGroup": "large",
+	}
+	var listResponse ListResponse
+	_, err := client.http.R().SetQueryParams(queryParams).SetResult(&listResponse).Get(apiUrl)
+	if err != nil {
+		return nil, err
+	}
+	if listResponse.Results == 0 {
+		return nil, fmt.Errorf("bangumi tv search result is empty")
+	}
+	var subjects []SubjectItem
+	var names []string
+	for _, item := range listResponse.List {
+		if item.NameCn == keyword || item.Name == keyword {
+			return client.GetSubjects(item.ID)
+		}
+
+		subjects = append(subjects, item)
+		names = append(names, item.Name)
+		names = append(names, item.NameCn)
 	}
 	matchResult := strsim.FindBestMatch(keyword, names)
 

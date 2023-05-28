@@ -142,7 +142,7 @@ func (dl *SmartDownloader) downloadUsingPikpakAndAria2(info *bangumi.BangumiInfo
 	magnet := torr.Magnet(&torrHashBytes, &torrInfo).String()
 
 	baseName := fmt.Sprintf("[%s] S%01dE%02d", info.Title, seasonNum, episode.Number)
-	files, err := dl.pikpak.OfflineDownAndWait(baseName, magnet, time.Minute*5)
+	files, err := dl.pikpak.OfflineDownAndWait(baseName, magnet, time.Minute*30)
 	if err != nil {
 		dl.logger.Error().Err(err).Str("title", info.Title).Uint("season", seasonNum).Uint("episode", episode.Number).Msg("pikpak download error")
 		return nil, err

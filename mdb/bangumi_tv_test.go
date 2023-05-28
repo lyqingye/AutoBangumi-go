@@ -36,6 +36,15 @@ func TestSearchSubjec3t(t *testing.T) {
 	t.Log(subject.GetAliasNames())
 }
 
+func TestSearchAnime2(t *testing.T) {
+	bangumiTVClient, err := mdb.NewBangumiTVClient("https://api.bgm.tv/v0")
+	require.NoError(t, err)
+	require.NotNil(t, bangumiTVClient)
+	subject, err := bangumiTVClient.SearchAnime2("赤发的白雪姬")
+	require.NoError(t, err)
+	require.NotNil(t, subject)
+}
+
 func TestMe(t *testing.T) {
 	bangumiTVClient, err := mdb.NewBangumiTVClient("https://api.bgm.tv/v0")
 	require.NoError(t, err)

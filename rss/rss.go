@@ -64,7 +64,7 @@ func (man *RSSManager) watchNewBangumi() error {
 		if event.EventType == bus.BangumiManAddNewEvent {
 			man.logger.Info().Msg("recv add new bangumi event")
 			if bangumi, ok := event.Inner.(bangumitypes.Bangumi); ok {
-				man.logger.Info().Str("titie", bangumi.Info.Title).Msg("add new bangumi")
+				man.logger.Info().Str("title", bangumi.Info.Title).Msg("add new bangumi")
 				man.bgmMan.GetAndLockInCompleteBangumi(bangumi.Info.Title, func(bgmMan *bangumitypes.BangumiManager, bangumi *bangumitypes.Bangumi) {
 					man.refreshBangumi(parser, bgmMan, bangumi)
 				})

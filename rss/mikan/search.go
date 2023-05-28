@@ -3,11 +3,14 @@ package mikan
 import (
 	bangumitypes "autobangumi-go/bangumi"
 	"autobangumi-go/mdb"
+	"autobangumi-go/utils"
+	"bytes"
 	"encoding/xml"
 	"fmt"
 	"regexp"
 	"strings"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/antlabs/strsim"
 	tmdb "github.com/cyruzin/golang-tmdb"
 )
@@ -34,7 +37,56 @@ func (parser *MikanRSSParser) Search(keyword string) (*bangumitypes.Bangumi, err
 		names = append(names, bgm.Info.Title)
 	}
 	matchResult := strsim.FindBestMatch(keyword, names)
-	return &result[matchResult.BestIndex], nil
+	return result[matchResult.BestIndex], nil
+}
+
+func (parser *MikanRSSParser) Search2(keyword string) (*bangumitypes.Bangumi, error) {
+	resp, err := parser.http.R().SetQueryParam("searchstr", keyword).Get(parser.mikanEndpoint.JoinPath("HOME/Search").String())
+	if err != nil {
+		return nil, err
+	}
+	rssContent := MikanRss{}
+	doc, err := goquery.NewDocumentFromReader(bytes.NewBuffer(resp.Body()))
+	if err != nil {
+		return nil, err
+	}
+	doc.Find("#sk-container > div.central-container > table > tbody > tr.js-search-results-row").
+		Each(func(_ int, tr *goquery.Selection) {
+			item := MikanRssItem{}
+			tr.Find("td > a").Each(func(_ int, a *goquery.Selection) {
+				if val, found := a.Attr("class"); found && val == "magnet-link-wrap" {
+					item.Title = a.Text()
+				}
+				if val, found := a.Attr("href"); found {
+					if strings.HasPrefix(val, "/Home/Episode") {
+						item.Link = parser.mikanEndpoint.JoinPath(val).String()
+						item.Torrent.Link = item.Link
+					}
+				}
+			})
+			tr.Find("td").Each(func(i int, td *goquery.Selection) {
+				_, err := utils.SmartParseDate(td.Text())
+				if err == nil {
+					item.Torrent.PubDate = td.Text()
+				}
+			})
+			if item.Torrent.PubDate != "" {
+				rssContent.Channel.Item = append(rssContent.Channel.Item, item)
+			}
+		})
+	result, err := parser.parseMikanRSS(&rssContent)
+	if err != nil {
+		return nil, err
+	}
+	if len(result) == 0 {
+		return nil, fmt.Errorf("search bangumi empty: %s", keyword)
+	}
+	var names []string
+	for _, bgm := range result {
+		names = append(names, bgm.Info.Title)
+	}
+	matchResult := strsim.FindBestMatch(keyword, names)
+	return result[matchResult.BestIndex], nil
 }
 
 func (parser *MikanRSSParser) searchBangumiTV(keyword string) (*mdb.Subjects, error) {
@@ -42,7 +94,7 @@ func (parser *MikanRSSParser) searchBangumiTV(keyword string) (*mdb.Subjects, er
 	key := getBangumiTVCacheKeyByKeyword(keyword)
 	cached, err := parser.db.Get(key, &cachedSubject)
 	if err != nil || !cached {
-		subject, err := parser.bangumiTvClient.SearchAnime(keyword)
+		subject, err := parser.bangumiTvClient.SearchAnime2(keyword)
 		if err != nil {
 			return nil, err
 		}

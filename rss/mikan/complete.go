@@ -33,6 +33,8 @@ func (parser *MikanRSSParser) CompleteBangumi(bangumi *bangumitypes.Bangumi) err
 	if len(bangumi.Seasons) == 0 {
 		bangumi.Seasons = make(map[uint]bangumitypes.Season)
 	}
+
+	allSeasonCollected := true
 	for _, season := range tv.Seasons {
 		if season.SeasonNumber == 0 {
 			continue
@@ -41,10 +43,21 @@ func (parser *MikanRSSParser) CompleteBangumi(bangumi *bangumitypes.Bangumi) err
 		existsSeason.Number = uint(season.SeasonNumber)
 		existsSeason.EpCount = uint(season.EpisodeCount)
 		bangumi.Seasons[uint(season.SeasonNumber)] = existsSeason
+
+		if !existsSeason.IsEpisodesCollected() {
+			allSeasonCollected = false
+		}
+	}
+
+	if allSeasonCollected {
+		return nil
 	}
 
 	for _, season := range bangumi.Seasons {
 		if season.MikanBangumiId != "" {
+			if season.IsEpisodesCollected() {
+				continue
+			}
 			err = parser.completeSeasonByMikanBangumiId(info, &season)
 			if err != nil {
 				continue
@@ -52,9 +65,16 @@ func (parser *MikanRSSParser) CompleteBangumi(bangumi *bangumitypes.Bangumi) err
 		}
 	}
 
-	searchResult, err := parser.Search(info.Title)
+	searchResult, err := parser.Search2(info.Title)
 	if err != nil {
-		return err
+		subject, err := parser.searchBangumiTV(info.Title)
+		if err != nil {
+			return err
+		}
+		searchResult, err = parser.Search2(subject.NameCn)
+		if err != nil {
+			return err
+		}
 	}
 
 	return parser.completeBangumiBySearchResult(bangumi, searchResult)
@@ -68,6 +88,9 @@ func (parser *MikanRSSParser) completeBangumiBySearchResult(bangumi *bangumitype
 	// complete season
 	for seasonNumber, source := range searchResult.Seasons {
 		dest := bangumi.Seasons[seasonNumber]
+		if dest.IsEpisodesCollected() {
+			continue
+		}
 		parser.mergeSeasonInfo(&dest, &source)
 		bangumi.Seasons[seasonNumber] = dest
 	}

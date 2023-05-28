@@ -15,6 +15,7 @@ var Aria2DownloadOptions arigo.Options = arigo.Options{
 	AutoFileRenaming: false,
 	MaxFileNotFound:  100,
 	MaxTries:         100,
+	AllowOverwrite:   true,
 }
 
 type Client struct {
@@ -146,8 +147,8 @@ func (cli *Client) ListActiveTasks() ([]arigo.Status, error) {
 func (cli *Client) IterStoppedTasks(fn func(status arigo.Status) bool) error {
 	offset := 0
 	var limit uint = 100
-	aria2 := cli.inner.Load()
 	for {
+		aria2 := cli.inner.Load()
 		statusList, err := aria2.TellStopped(offset, limit, []string{}...)
 		if err != nil {
 			return err
@@ -169,8 +170,8 @@ func (cli *Client) IterStoppedTasks(fn func(status arigo.Status) bool) error {
 func (cli *Client) IterWaitingTasks(fn func(status arigo.Status) bool) error {
 	offset := 0
 	var limit uint = 100
-	aria2 := cli.inner.Load()
 	for {
+		aria2 := cli.inner.Load()
 		statusList, err := aria2.TellWaiting(offset, limit, []string{}...)
 		if err != nil {
 			return err

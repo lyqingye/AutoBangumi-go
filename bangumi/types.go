@@ -88,6 +88,10 @@ func (season *Season) IsComplete(epNum uint) bool {
 	return false
 }
 
+func (season *Season) IsEpisodesCollected() bool {
+	return int(season.EpCount) == len(season.Episodes)
+}
+
 type BangumiInfo struct {
 	Title  string `json:"title"`
 	TmDBId int64  `json:"tmdbId"`
@@ -111,7 +115,7 @@ type Episode struct {
 }
 
 func (e *Episode) IsNeedToDownload() bool {
-	return e.DownloadState.Downloader == "" && e.DownloadState.TaskId == ""
+	return e.DownloadState.Downloader == ""
 }
 
 type DownloadState struct {

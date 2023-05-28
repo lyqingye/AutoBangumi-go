@@ -5,6 +5,8 @@ import (
 	"autobangumi-go/db"
 	"autobangumi-go/mdb"
 	"autobangumi-go/rss/mikan"
+	"io"
+	"net/http"
 	"os"
 	"regexp"
 	"strings"
@@ -54,12 +56,23 @@ func TestMikanSearch(t *testing.T) {
 	eb.Start()
 	parser, err := mikan.NewMikanRSSParser("https://mikanani.me/RSS/Bangumi?bangumiId=444", eb, db, tmdbClient, bangumiTVClient)
 	require.NoError(t, err)
-	result, err := parser.Search("与山田谈一场Lv999的恋爱")
+	//result, err := parser.Search("式守同学不只可爱而已")
+	//require.NoError(t, err)
+	//require.NotNil(t, result)
+
+	result, err := parser.Search2("路人女主的养成方法")
 	require.NoError(t, err)
 	require.NotNil(t, result)
 }
 
 func TestMikanCompleteBangumi(t *testing.T) {
+	resp, err := http.Get("https://mikanani.me/RSS/Search?searchstr=%E6%88%91%E7%9A%84%E9%9D%92%E6%98%A5")
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	bz, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NotNil(t, bz)
+
 	dir := "./parser_cache"
 	db, err := db.NewDB(dir)
 	require.NoError(t, err)
@@ -78,8 +91,7 @@ func TestMikanCompleteBangumi(t *testing.T) {
 	require.NoError(t, err)
 	bangumi := bangumitypes.Bangumi{
 		Info: bangumitypes.BangumiInfo{
-			Title:  "【我推的孩子】",
-			TmDBId: 203737,
+			Title: "乙女游戏世界对路人角色很不友好",
 		},
 	}
 	err = parser.CompleteBangumi(&bangumi)

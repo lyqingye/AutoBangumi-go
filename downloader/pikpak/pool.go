@@ -125,6 +125,7 @@ Retry:
 
 	if task == nil {
 		// offline download and wait
+		pool.logger.Debug().Str("name", name).Msg("add offline task")
 		newTask, err := client.OfflineDownload(name, magnet, "")
 		if err != nil {
 			if errors.Is(err, pikpakgo.ErrDailyCreateLimit) {
@@ -145,6 +146,7 @@ Retry:
 		pool.logger.Debug().Str("name", name).Msg("find exists offline task")
 	}
 
+	pool.logger.Info().Str("name", name).Msg("wait for offline task finished")
 	finishedTask, err := client.WaitForOfflineDownloadComplete(task.ID, timeout, func(t *pikpakgo.Task) {
 		pool.logger.Debug().Int("progress", t.Progress).Str("name", t.FileName).Msg("task update")
 	})

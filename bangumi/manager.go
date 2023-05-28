@@ -17,12 +17,13 @@ import (
 )
 
 type BangumiManager struct {
-	home       string
-	inComplete map[string]Bangumi
-	complete   map[string]Bangumi
-	rwLock     sync.RWMutex
-	logger     zerolog.Logger
-	eb         *bus.EventBus
+	home        string
+	inComplete  map[string]Bangumi
+	complete    map[string]Bangumi
+	rwLock      sync.RWMutex
+	logger      zerolog.Logger
+	eb          *bus.EventBus
+	episodeLock map[string]sync.Mutex
 }
 
 func NewBangumiManager(home string, eb *bus.EventBus) (*BangumiManager, error) {

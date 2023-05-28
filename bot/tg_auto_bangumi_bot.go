@@ -63,6 +63,7 @@ func NewTGAutoBangumiBot(config *TGAutoBangumiBotConfig) (*TGAutoBangumiBot, err
 	}
 	bot.autoBangumi = autoBangumi
 	bot.cache = *utils.NewSimpleTTLCache(time.Hour * 24)
+	autoBangumi.dl.AddCallback(&bot)
 	return &bot, nil
 }
 
@@ -151,4 +152,12 @@ func (bot *TGAutoBangumiBot) OnCallbackQuery(tgBot *TGBot, cq *tgbotapi.Callback
 		}
 	}
 	bot.cache.Delete(cacheKey)
+}
+
+func (bot *TGAutoBangumiBot) OnComplete(info *bangumi.BangumiInfo, seasonNum uint, episode bangumi.Episode) {
+	bot.tg.sendMsg(fmt.Sprintf("[%s] S%01dE%02d finished", info.Title, seasonNum, episode.Number))
+}
+
+func (bot *TGAutoBangumiBot) OnErr(err error, info *bangumi.BangumiInfo, seasonNum uint, episode bangumi.Episode) {
+
 }
