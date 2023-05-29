@@ -45,12 +45,62 @@ func (parser *MikanRSSParser) Search2(keyword string) (*bangumitypes.Bangumi, er
 	if err != nil {
 		return nil, err
 	}
-	rssContent := MikanRss{}
 	doc, err := goquery.NewDocumentFromReader(bytes.NewBuffer(resp.Body()))
 	if err != nil {
 		return nil, err
 	}
-	doc.Find("#sk-container > div.central-container > table > tbody > tr.js-search-results-row").
+	rssContent, err := parser.parserRSSFromWebPage(doc)
+	if err != nil {
+		return nil, err
+	}
+	result, err := parser.parseMikanRSS(rssContent)
+	if err != nil {
+		return nil, err
+	}
+	if len(result) == 0 {
+		return nil, fmt.Errorf("search bangumi empty: %s", keyword)
+	}
+	var names []string
+	for _, bgm := range result {
+		names = append(names, bgm.Info.Title)
+	}
+	matchResult := strsim.FindBestMatch(keyword, names)
+	return result[matchResult.BestIndex], nil
+}
+
+func (parser *MikanRSSParser) Search3(bangumiId string) (*bangumitypes.Bangumi, error) {
+	resp, err := parser.http.R().Get(parser.mikanEndpoint.JoinPath(fmt.Sprintf("HOME/Bangumi/%s", bangumiId)).String())
+	if err != nil {
+		return nil, err
+	}
+	doc, err := goquery.NewDocumentFromReader(bytes.NewBuffer(resp.Body()))
+	if err != nil {
+		return nil, err
+	}
+	rssContent, err := parser.parserRSSFromWebPage(doc)
+	if err != nil {
+		return nil, err
+	}
+	result, err := parser.parseMikanRSS(rssContent)
+	if err != nil {
+		return nil, err
+	}
+	if len(result) == 0 {
+		return nil, fmt.Errorf("search bangumi empty: %s", bangumiId)
+	}
+	for _, bgm := range result {
+		for _, season := range bgm.Seasons {
+			if season.MikanBangumiId == bangumiId {
+				return bgm, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("search bangumi empty: %s", bangumiId)
+}
+
+func (parser *MikanRSSParser) parserRSSFromWebPage(doc *goquery.Document) (*MikanRss, error) {
+	rssContent := MikanRss{}
+	doc.Find("table > tbody > tr").
 		Each(func(_ int, tr *goquery.Selection) {
 			item := MikanRssItem{}
 			tr.Find("td > a").Each(func(_ int, a *goquery.Selection) {
@@ -74,19 +124,7 @@ func (parser *MikanRSSParser) Search2(keyword string) (*bangumitypes.Bangumi, er
 				rssContent.Channel.Item = append(rssContent.Channel.Item, item)
 			}
 		})
-	result, err := parser.parseMikanRSS(&rssContent)
-	if err != nil {
-		return nil, err
-	}
-	if len(result) == 0 {
-		return nil, fmt.Errorf("search bangumi empty: %s", keyword)
-	}
-	var names []string
-	for _, bgm := range result {
-		names = append(names, bgm.Info.Title)
-	}
-	matchResult := strsim.FindBestMatch(keyword, names)
-	return result[matchResult.BestIndex], nil
+	return &rssContent, nil
 }
 
 func (parser *MikanRSSParser) searchBangumiTV(keyword string) (*mdb.Subjects, error) {

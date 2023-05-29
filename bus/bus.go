@@ -68,7 +68,7 @@ func (eb *EventBus) Start() {
 func (eb *EventBus) runLoop() {
 	for ev := range eb.pendingEvents {
 		eb.logger.Trace().Str("topic", ev.Topic).Str("event type", ev.Inner.EventType).Msg("dispatch event")
-		eb.dispatch(ev.Topic, ev.Inner)
+		go eb.dispatch(ev.Topic, ev.Inner)
 	}
 	panic("event bus channel close")
 }
@@ -77,7 +77,7 @@ func (eb *EventBus) dispatch(topic string, event Event) {
 	if handlers, found := eb.handlers[topic]; found && len(handlers) > 0 {
 		for _, handler := range handlers {
 			eb.logger.Trace().Str("topic", topic).Str("event type", event.EventType).Msg("handle event")
-			go handler.HandleEvent(event)
+			handler.HandleEvent(event)
 		}
 	} else {
 		eb.logger.Warn().Str("topic", topic).Str("event type", event.EventType).Msg("non handlers, this event will be discard")

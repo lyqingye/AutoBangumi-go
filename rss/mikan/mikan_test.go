@@ -65,6 +65,29 @@ func TestMikanSearch(t *testing.T) {
 	require.NotNil(t, result)
 }
 
+func TestMikanSearch3(t *testing.T) {
+	dir := "./parser_cache"
+	db, err := db.NewDB(dir)
+	require.NoError(t, err)
+	require.NotNil(t, db)
+	defer func() {
+		_ = db.Close()
+		_ = os.RemoveAll(dir)
+	}()
+	tmdbClient, err := mdb.NewTMDBClient("702225c8ca516a5be2f062988438bfda")
+	require.NoError(t, err)
+	bangumiTVClient, err := mdb.NewBangumiTVClient("https://api.bgm.tv/v0")
+	require.NoError(t, err)
+	eb := bus.NewEventBus()
+	eb.Start()
+	parser, err := mikan.NewMikanRSSParser("https://mikanani.me/RSS/Bangumi?bangumiId=444", eb, db, tmdbClient, bangumiTVClient)
+	require.NoError(t, err)
+
+	result, err := parser.Search3("2984")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+}
+
 func TestMikanCompleteBangumi(t *testing.T) {
 	resp, err := http.Get("https://mikanani.me/RSS/Search?searchstr=%E6%88%91%E7%9A%84%E9%9D%92%E6%98%A5")
 	require.NoError(t, err)

@@ -3,7 +3,6 @@ package mikan
 import (
 	bangumitypes "autobangumi-go/bangumi"
 	"errors"
-	"fmt"
 	tmdb "github.com/cyruzin/golang-tmdb"
 )
 
@@ -53,7 +52,7 @@ func (parser *MikanRSSParser) CompleteBangumi(bangumi *bangumitypes.Bangumi) err
 		return nil
 	}
 
-	for _, season := range bangumi.Seasons {
+	for number, season := range bangumi.Seasons {
 		if season.MikanBangumiId != "" {
 			if season.IsEpisodesCollected() {
 				continue
@@ -63,6 +62,7 @@ func (parser *MikanRSSParser) CompleteBangumi(bangumi *bangumitypes.Bangumi) err
 				continue
 			}
 		}
+		bangumi.Seasons[number] = season
 	}
 
 	searchResult, err := parser.Search2(info.Title)
@@ -139,21 +139,13 @@ func (parser *MikanRSSParser) mergeSeasonInfo(dest *bangumitypes.Season, source 
 }
 
 func (parser *MikanRSSParser) completeSeasonByMikanBangumiId(bangumiInfo bangumitypes.BangumiInfo, season *bangumitypes.Season) error {
-	mikanRss, err := parser.getRss(parser.mikanEndpoint.JoinPath(fmt.Sprintf("RSS/Bangumi?bangumiId=%s", season.MikanBangumiId)).String())
+	bgm, err := parser.Search3(season.MikanBangumiId)
 	if err != nil {
 		return err
 	}
-
-	multiResults, err := parser.parseMikanRSS(mikanRss)
-	if err != nil {
-		return err
-	}
-
-	for _, bangumi := range multiResults {
-		if bangumi.Info.TmDBId == bangumiInfo.TmDBId {
-			if source, found := bangumi.Seasons[season.Number]; found {
-				parser.mergeSeasonInfo(season, &source)
-			}
+	if bgm.Info.TmDBId == bangumiInfo.TmDBId {
+		if source, found := bgm.Seasons[season.Number]; found && source.MikanBangumiId == season.MikanBangumiId {
+			parser.mergeSeasonInfo(season, &source)
 		}
 	}
 

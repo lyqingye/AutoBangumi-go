@@ -104,13 +104,12 @@ func (man *RSSManager) refreshInComplete() error {
 func (man *RSSManager) refreshBangumi(parser *mikan.MikanRSSParser, bgmMan *bangumitypes.BangumiManager, bangumi *bangumitypes.Bangumi) {
 	man.logger.Info().Str("title", bangumi.Info.Title).Msg("refresh bangumi")
 	err := parser.CompleteBangumi(bangumi)
-	if err == nil {
-		_ = bgmMan.Flush(bangumi)
-		man.eb.Publish(bus.RSSTopic, bus.Event{
-			EventType: bus.RSSUpdateEventType,
-			Inner:     *bangumi,
-		})
-	} else {
+	_ = bgmMan.Flush(bangumi)
+	man.eb.Publish(bus.RSSTopic, bus.Event{
+		EventType: bus.RSSUpdateEventType,
+		Inner:     *bangumi,
+	})
+	if err != nil {
 		man.logger.Error().Err(err).Str("title", bangumi.Info.Title).Msg("complete bangumi error")
 	}
 }
