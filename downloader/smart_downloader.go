@@ -150,7 +150,6 @@ func (dl *SmartDownloader) downloadUsingPikpakAndAria2(info *bangumi.BangumiInfo
 	dl.logger.Debug().Str("title", info.Title).Uint("season", seasonNum).Uint("episode", episode.Number).Msg("pikpak download complete")
 
 	var gids []string
-	var downloadingFiles []*pikpak.File
 
 	clear := func() {
 		for _, gid := range gids {
@@ -171,7 +170,6 @@ func (dl *SmartDownloader) downloadUsingPikpakAndAria2(info *bangumi.BangumiInfo
 			}
 			dl.logger.Debug().Str("file", newFilename).Msg("add aria2 task success")
 			gids = append(gids, gid.GID)
-			downloadingFiles = append(downloadingFiles, fi)
 		} else {
 			dl.logger.Warn().Str("file", fi.Name).Msg("unable to rename file")
 		}

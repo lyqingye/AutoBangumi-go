@@ -3,7 +3,7 @@ package qibittorrent_test
 import (
 	"autobangumi-go/downloader/qibittorrent"
 	"bytes"
-	"io/ioutil"
+	"os"
 	"testing"
 	"time"
 
@@ -19,7 +19,7 @@ func TestQbittorent(t *testing.T) {
 	err = qb.Login()
 	require.NoError(t, err)
 
-	bz, err := ioutil.ReadFile("/home/lyqingye/Downloads/4f0379c68a3078f5ed8504be57e0b827cfe5b812.torrent")
+	bz, err := os.ReadFile("/home/lyqingye/Downloads/4f0379c68a3078f5ed8504be57e0b827cfe5b812.torrent")
 	require.NoError(t, err)
 	torrent, err := torrent.Load(bytes.NewBuffer(bz))
 	require.NoError(t, err)
@@ -54,7 +54,7 @@ func TestListTorrent(t *testing.T) {
 	require.NoError(t, err)
 	list, err := qb.ListAllTorrent(qibittorrent.FilterStalledDownloadingTorrentList)
 	for _, torrent := range list {
-		addTime := time.Unix(int64(torrent.AddedOn),0)
+		addTime := time.Unix(int64(torrent.AddedOn), 0)
 		println(addTime.String())
 		t.Log(torrent.Hash)
 	}
@@ -67,7 +67,7 @@ func TestGetTorrentContent(t *testing.T) {
 	require.NotNil(t, qb)
 	err = qb.Login()
 	require.NoError(t, err)
-	bz, err := ioutil.ReadFile("/home/lyqingye/Downloads/a55ed28af3d95bf54f74c0abe4ca0ebedbbac347.torrent")
+	bz, err := os.ReadFile("/home/lyqingye/Downloads/a55ed28af3d95bf54f74c0abe4ca0ebedbbac347.torrent")
 	require.NoError(t, err)
 	hash, err := qb.AddTorrent("", bz, "")
 	require.NoError(t, err)

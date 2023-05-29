@@ -11,7 +11,7 @@ require (
 	github.com/fsnotify/fsnotify v1.5.4
 	github.com/go-resty/resty/v2 v2.7.0
 	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
-	github.com/lyqingye/pikpak-go v0.0.0-20230525105502-c348d2cc4b3a
+	github.com/lyqingye/pikpak-go v0.0.0-20230529054323-cbdaca3a3b8a
 	github.com/nssteinbrenner/anitogo v0.0.0-20200907113149-eb04a0056b4a
 	github.com/rs/zerolog v1.29.1
 	github.com/siku2/arigo v0.0.0-00010101000000-000000000000
@@ -19,6 +19,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.2
 	github.com/tendermint/tm-db v0.6.7
+
 )
 
 require (

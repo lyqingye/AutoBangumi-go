@@ -192,8 +192,8 @@ github.com/lyqingye/anitogo v0.0.0-20230517021436-770746b18c27 h1:SwBkQ+onOCMyCv
 github.com/lyqingye/anitogo v0.0.0-20230517021436-770746b18c27/go.mod h1:3/VeFN4eo5yPpgr9fAEtQgiTpmxruY2/RpqB0J1TPr0=
 github.com/lyqingye/arigo v0.0.0-20230527062939-ade95127cd9e h1:Yb/TTE35bi2krGJYzA9Zx1r5exqoWGnLtAr3vlky0s8=
 github.com/lyqingye/arigo v0.0.0-20230527062939-ade95127cd9e/go.mod h1:Rwxov7tRTk+WnmNaK7X6yVlfzDoSIv0r4BxKq7/mQmU=
-github.com/lyqingye/pikpak-go v0.0.0-20230525105502-c348d2cc4b3a h1:LX1tY6dZ098gDSj+G+uwU0Q4fFNsi57kfAeoovXCSHA=
-github.com/lyqingye/pikpak-go v0.0.0-20230525105502-c348d2cc4b3a/go.mod h1:9wjfAAkZAFVcN9vksl47uV+3AdeObc5tBCEURkhhIns=
+github.com/lyqingye/pikpak-go v0.0.0-20230529054323-cbdaca3a3b8a h1:8FCY3g9qy50xr/QgM7JVDUKkbUEEK+PDxXmGkoByPFQ=
+github.com/lyqingye/pikpak-go v0.0.0-20230529054323-cbdaca3a3b8a/go.mod h1:9wjfAAkZAFVcN9vksl47uV+3AdeObc5tBCEURkhhIns=
 github.com/magiconair/properties v1.8.0/go.mod h1:PppfXfuXeibc/6YijjN8zIbojt8czPbwD3XqdrwzmxQ=
 github.com/mattn/go-colorable v0.1.12/go.mod h1:u5H1YNBxpqRaxsYJYSkiCWKzEfiAb1Gb520KVy5xxl4=
 github.com/mattn/go-colorable v0.1.13 h1:fFA4WZxdEF4tXPZVKMLwD8oUnCTTo08duU7wxecdEvA=

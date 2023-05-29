@@ -60,7 +60,6 @@ func NewPool(configPath string) (*Pool, error) {
 	if err != nil {
 		return nil, err
 	}
-	go pool.autoRefreshAccounts()
 	return &pool, nil
 }
 
@@ -94,13 +93,12 @@ func (pool *Pool) AddAccount(username, password string) {
 
 func (pool *Pool) OfflineDownAndWait(name, magnet string, timeout time.Duration) ([]*File, error) {
 	pool.lock.Lock()
-	defer pool.lock.Unlock()
-
 	pool.logger.Info().Str("name", name).Msg("try to add offline task")
 
 Retry:
 	client, acc, err := pool.getClient()
 	if err != nil {
+		pool.lock.Unlock()
 		return nil, err
 	}
 
@@ -111,6 +109,9 @@ Retry:
 			t.Params.URL == magnet ||
 			strings.Contains(t.Params.URL, magnet)
 		if sameTask {
+			if t.Phase == pikpakgo.PhaseTypeError {
+				_ = client.OfflineRemove([]string{t.ID}, true)
+			}
 			if t.Phase == pikpakgo.PhaseTypeComplete {
 				task = t
 				return true
@@ -120,6 +121,7 @@ Retry:
 	})
 
 	if err != nil {
+		pool.lock.Unlock()
 		return nil, err
 	}
 
@@ -136,6 +138,7 @@ Retry:
 				pool.setAccountRestricted(acc, StateNoSpaceLeft)
 			}
 			if acc.State == StateNormal {
+				pool.lock.Unlock()
 				return nil, err
 			}
 			pool.logger.Error().Err(err).Msg("offline download error")
@@ -146,17 +149,23 @@ Retry:
 		pool.logger.Debug().Str("name", name).Msg("find exists offline task")
 	}
 
+	pool.lock.Unlock()
+
 	pool.logger.Info().Str("name", name).Msg("wait for offline task finished")
 	finishedTask, err := client.WaitForOfflineDownloadComplete(task.ID, timeout, func(t *pikpakgo.Task) {
 		pool.logger.Debug().Int("progress", t.Progress).Str("name", t.FileName).Msg("task update")
 	})
 
 	if err != nil {
+		if err == pikpakgo.ErrWaitForOfflineDownloadTimeout {
+			_ = client.OfflineRemove([]string{task.ID}, true)
+		}
 		return nil, err
 	}
 
 	pool.logger.Info().Str("name", name).Msg("offline task finished")
 	if finishedTask.Phase == pikpakgo.PhaseTypeError {
+		_ = client.OfflineRemove([]string{task.ID}, true)
 		pool.logger.Error().Str("name", name).Str("detail", finishedTask.Message).Msg("offline task error")
 		return nil, fmt.Errorf("offline task error: %s", finishedTask.Message)
 	}
@@ -198,7 +207,7 @@ Retry:
 
 func (pool *Pool) RemoveFile(downloadUrl string) error {
 	pool.lock.Lock()
-	defer pool.lock.Lock()
+	defer pool.lock.Unlock()
 	var file *File
 	if f, found := pool.fileUrlToFile[downloadUrl]; found {
 		file = f
@@ -333,15 +342,4 @@ func (pool *Pool) setAccountRestricted(acc *Account, newState string) {
 	acc.RestrictedTime = time.Now()
 	delete(pool.accounts, acc.Username)
 	pool.restrictedAccounts[acc.Username] = *acc
-}
-
-func (pool *Pool) autoRefreshAccounts() {
-	ticker := time.NewTicker(time.Hour * 1)
-	for range ticker.C {
-		pool.logger.Info().Msg("auto refresh accounts")
-		err := pool.refreshAccounts()
-		if err != nil {
-			pool.logger.Error().Err(err).Msg("auto refresh accounts error")
-		}
-	}
 }
