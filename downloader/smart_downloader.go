@@ -147,7 +147,7 @@ func (dl *SmartDownloader) downloadUsingPikpakAndAria2(info *bangumi.BangumiInfo
 	magnet := torr.Magnet(&torrHashBytes, &torrInfo).String()
 
 	baseName := fmt.Sprintf("[%s] S%01dE%02d", info.Title, seasonNum, episode.Number)
-	files, err := dl.pikpak.OfflineDownAndWait(baseName, magnet, time.Minute*3)
+	files, err := dl.pikpak.OfflineDownAndWait(baseName, magnet, time.Minute*5)
 	if err != nil {
 		l.Error().Err(err).Msg("pikpak download error")
 		return err
@@ -213,9 +213,7 @@ func (dl *SmartDownloader) waitAria2DownloadComplete(gids []string, info *bangum
 				for _, fi := range status.Files {
 					for _, uri := range fi.URIs {
 						err := dl.pikpak.RemoveFile(uri.URI)
-						if err != nil {
-							l.Warn().Err(err).Msg("try to delete pikpak file error")
-						} else {
+						if err == nil {
 							l.Debug().Str("filename", fi.Path).Msg("remove pikpak file")
 						}
 					}
@@ -302,7 +300,7 @@ func (dl *SmartDownloader) waitQbDownloadComplete(hash string, info *bangumi.Ban
 	isTimeout := false
 	err := dl.qb.WatchTorrentProperties(hash, time.Second*5, func(torr *qbittorrent.TorrentProperties) bool {
 
-		if torr.CompletionDate != 0 {
+		if torr.CompletionDate != -1 {
 			l.Info().Msg("download complete")
 			dl.onComplete(info, seasonNum, episode)
 			return true
@@ -322,6 +320,10 @@ func (dl *SmartDownloader) waitQbDownloadComplete(hash string, info *bangumi.Ban
 	}
 	if isTimeout {
 		l.Warn().Msg("torrent has not been downloaded by qb for more than an hour, try fallback to pikpak + aria2")
+		err = dl.qb.DeleteTorrents([]string{hash}, true)
+		if err != nil {
+			l.Error().Err(err).Msg("delete qb torrent")
+		}
 
 		// reset downloader state
 		episode.DownloadState = bangumi.DownloadState{}

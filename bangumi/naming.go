@@ -3,6 +3,8 @@ package bangumi
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -43,7 +45,7 @@ var (
 		"简中内嵌":    SubtitleChs,
 		"简体内嵌":    SubtitleChs,
 		"繁中内嵌":    SubtitleCht,
-		"繁体内嵌": SubtitleCht,
+		"繁体内嵌":    SubtitleCht,
 		"简繁日内封字幕": SubtitleChs,
 		"BIG5":    SubtitleCht,
 		"GB":      SubtitleChs,
@@ -53,6 +55,13 @@ var (
 
 func DirNaming(info *BangumiInfo, seasonNum uint) string {
 	return filepath.Join(info.Title, fmt.Sprintf("Season %02d", seasonNum))
+}
+
+func ParseDirName(dirname string) (uint, error) {
+	season := strings.ReplaceAll(dirname, "Season", "")
+	season = strings.TrimSpace(season)
+	seasonNum, err := strconv.ParseUint(season, 10, 32)
+	return uint(seasonNum), err
 }
 
 func RenamingEpisodeFileName(info *BangumiInfo, seasonNum uint, ep *Episode, filename string) string {
@@ -80,4 +89,26 @@ func RenamingEpisodeFileName(info *BangumiInfo, seasonNum uint, ep *Episode, fil
 		}
 	}
 	return ""
+}
+
+func ParseEpisodeFilename(filename string) (season uint, episode uint, err error) {
+	pattern := `S(\d{2})E(\d{2})`
+	regex := regexp.MustCompile(pattern)
+	matches := regex.FindStringSubmatch(filename)
+	var number uint64
+	if len(matches) == 3 {
+		number, err = strconv.ParseUint(matches[1], 10, 32)
+		if err != nil {
+			return
+		}
+		season = uint(number)
+		number, err = strconv.ParseUint(matches[2], 10, 32)
+		if err != nil {
+			return
+		}
+		episode = uint(number)
+	} else {
+		err = fmt.Errorf("faild to parse episode file name: %s", filename)
+	}
+	return
 }
