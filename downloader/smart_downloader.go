@@ -208,6 +208,18 @@ func (dl *SmartDownloader) waitAria2DownloadComplete(gids []string, info *bangum
 				dl.onErr(err, info, seasonNum, episode)
 			} else {
 				l.Info().Str("gid", gid).Msg(fmt.Sprintf("aria2 task complete %d/%d", i, len(gids)))
+
+				// recycle pikpak storage
+				for _, fi := range status.Files {
+					for _, uri := range fi.URIs {
+						err := dl.pikpak.RemoveFile(uri.URI)
+						if err != nil {
+							l.Warn().Err(err).Msg("try to delete pikpak file error")
+						} else {
+							l.Debug().Str("filename", fi.Path).Msg("remove pikpak file")
+						}
+					}
+				}
 			}
 		})
 		wg.Done()
@@ -223,6 +235,7 @@ func (dl *SmartDownloader) waitAria2DownloadComplete(gids []string, info *bangum
 
 		// callback
 		dl.onComplete(info, seasonNum, episode)
+
 	}()
 }
 
@@ -286,18 +299,20 @@ func (dl *SmartDownloader) downloadUsingQbittorrent(info *bangumi.BangumiInfo, s
 
 func (dl *SmartDownloader) waitQbDownloadComplete(hash string, info *bangumi.BangumiInfo, seasonNum uint, episode bangumi.Episode) {
 	l := dl.logger.With().Str("title", info.Title).Uint("season", seasonNum).Uint("episode", episode.Number).Logger()
-	timeout := time.Now().Add(time.Hour)
 	isTimeout := false
-	err := dl.qb.WatchTorrent(hash, time.Second*5, func(torr *qbittorrent.Torrent) bool {
-		if torr.CompletionOn != 0 {
+	err := dl.qb.WatchTorrentProperties(hash, time.Second*5, func(torr *qbittorrent.TorrentProperties) bool {
+
+		if torr.CompletionDate != 0 {
 			l.Info().Msg("download complete")
 			dl.onComplete(info, seasonNum, episode)
 			return true
 		}
-		if time.Now().After(timeout) {
+
+		if (time.Now().Unix() - int64(torr.CreationDate)) > int64(time.Hour.Seconds()) {
 			isTimeout = true
 			return true
 		}
+
 		return false
 	})
 
@@ -306,7 +321,7 @@ func (dl *SmartDownloader) waitQbDownloadComplete(hash string, info *bangumi.Ban
 		dl.onErr(err, info, seasonNum, episode)
 	}
 	if isTimeout {
-		l.Warn().Err(err).Msg("wait for download complete timeout, try fallback to pikpak + aria2")
+		l.Warn().Msg("torrent has not been downloaded by qb for more than an hour, try fallback to pikpak + aria2")
 
 		// reset downloader state
 		episode.DownloadState = bangumi.DownloadState{}
@@ -334,8 +349,12 @@ func (dl *SmartDownloader) renameTorrent(hash string, info *bangumi.BangumiInfo,
 			}
 			l.Info().Str("filename", fi.Name).Str("new filename", newName).Msg("rename episode")
 		} else {
-			l.Warn().Str("filename", fi.Name).Msg("unable to rename file, skip to download this file")
-			_ = dl.qb.SetFilePriority(hash, []int{fi.Index}, 0)
+			err = dl.qb.SetFilePriority(hash, []int{fi.Index}, 0)
+			if err != nil {
+				l.Error().Err(err).Str("filename", fi.Name).Msg("unable to rename file, skip download file error")
+			} else {
+				l.Warn().Str("filename", fi.Name).Msg("unable to rename file, skip to download this file")
+			}
 		}
 	}
 	return nil

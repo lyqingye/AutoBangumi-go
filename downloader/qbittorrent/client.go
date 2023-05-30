@@ -323,6 +323,21 @@ func (qb *QbittorrentClient) WatchTorrent(hash string, period time.Duration, cal
 	return nil
 }
 
+func (qb *QbittorrentClient) WatchTorrentProperties(hash string, period time.Duration, callback func(torr *TorrentProperties) bool) error {
+	ticker := time.NewTicker(period)
+	for range ticker.C {
+		torr, err := qb.GetTorrentProperties(hash)
+		if err == nil {
+			if callback(torr) {
+				break
+			}
+		} else if err == ErrTorrentNotFound {
+			return err
+		}
+	}
+	return nil
+}
+
 func respToErr(resp []byte) error {
 	if string(resp) == "Ok." {
 		return nil

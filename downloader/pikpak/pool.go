@@ -226,17 +226,12 @@ func (pool *Pool) RemoveFile(downloadUrl string) error {
 		if err != nil {
 			return err
 		}
-		err = client.BatchTrashFiles([]string{file.Id})
-		if err != nil {
-			return err
-		}
-
-		delete(pool.fileUrlToFile, downloadUrl)
-
 		err = client.BatchDeleteFiles([]string{file.Id})
 		if err != nil {
 			return err
 		}
+		delete(pool.fileUrlToFile, downloadUrl)
+
 	} else {
 		return fmt.Errorf("acc not found: %s", file.RefAcc)
 	}
