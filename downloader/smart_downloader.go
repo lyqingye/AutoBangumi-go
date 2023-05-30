@@ -28,15 +28,17 @@ type SmartDownloader struct {
 	aria2     *aria2.Client
 	pikpak    *pikpak.Pool
 	qb        *qbittorrent.QbittorrentClient
+	bgmMan    *bangumi.BangumiManager
 	callbacks []Callback
 }
 
-func NewSmartDownloader(aria2 *aria2.Client, pikpak *pikpak.Pool, qb *qbittorrent.QbittorrentClient) (*SmartDownloader, error) {
+func NewSmartDownloader(aria2 *aria2.Client, pikpak *pikpak.Pool, qb *qbittorrent.QbittorrentClient, bgmMan *bangumi.BangumiManager) (*SmartDownloader, error) {
 	downloader := SmartDownloader{
 		logger: utils.GetLogger("smart-downloader"),
 		aria2:  aria2,
 		pikpak: pikpak,
 		qb:     qb,
+		bgmMan: bgmMan,
 	}
 	return &downloader, nil
 }
@@ -57,7 +59,7 @@ func (dl *SmartDownloader) onErr(err error, info *bangumi.BangumiInfo, seasonNum
 	}
 }
 
-func (dl *SmartDownloader) DownloadEpisode(info *bangumi.BangumiInfo, seasonNum uint, episode bangumi.Episode) (*bangumi.DownloadState, error) {
+func (dl *SmartDownloader) DownloadEpisode(info *bangumi.BangumiInfo, seasonNum uint, episode bangumi.Episode) error {
 	l := dl.logger.With().Str("title", info.Title).Uint("season", seasonNum).Uint("episode", episode.Number).Logger()
 	if !episode.IsNeedToDownload() {
 		// maybe downloading
@@ -66,37 +68,37 @@ func (dl *SmartDownloader) DownloadEpisode(info *bangumi.BangumiInfo, seasonNum 
 			if episode.DownloadState.TaskId != "" {
 				gids := strings.Split(episode.DownloadState.TaskId, ",")
 				go dl.waitAria2DownloadComplete(gids, info, seasonNum, episode)
-				return nil, nil
+				return nil
 			}
 			status, err := dl.findAria2Task(info, seasonNum, episode)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			if status != nil {
 				go dl.waitAria2DownloadComplete([]string{status.GID}, info, seasonNum, episode)
-				return nil, nil
+				return nil
 			}
 		case "qb":
 			if episode.DownloadState.TaskId != "" {
 				dl.waitQbDownloadComplete(episode.DownloadState.TaskId, info, seasonNum, episode)
-				return nil, nil
+				return nil
 			}
 			torr, err := dl.findQBTask(episode)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			dl.waitQbDownloadComplete(torr.Hash, info, seasonNum, episode)
-			return nil, nil
+			return nil
 		}
 	}
 
 	l.Info().Msg("start download episode")
-	state, err := dl.downloadUsingPikpakAndAria2(info, seasonNum, episode)
+	err := dl.downloadUsingPikpakAndAria2(info, seasonNum, episode)
 	if err != nil {
-		l.Warn().Err(err).Msg("using pikpak download error, fallback to qibittorrent")
-		return dl.downloadUsingQibittorrent(info, seasonNum, episode)
+		l.Warn().Err(err).Msg("using pikpak download error, fallback to qbittorrent")
+		return dl.downloadUsingQbittorrent(info, seasonNum, episode)
 	}
-	return state, nil
+	return nil
 }
 
 func (dl *SmartDownloader) findAria2Task(info *bangumi.BangumiInfo, seasonNum uint, episode bangumi.Episode) (*arigo.Status, error) {
@@ -129,18 +131,18 @@ func (dl *SmartDownloader) findQBTask(episode bangumi.Episode) (*qbittorrent.Tor
 }
 
 // DownloadMagnetAndWait download and wait download complete
-func (dl *SmartDownloader) downloadUsingPikpakAndAria2(info *bangumi.BangumiInfo, seasonNum uint, episode bangumi.Episode) (*bangumi.DownloadState, error) {
+func (dl *SmartDownloader) downloadUsingPikpakAndAria2(info *bangumi.BangumiInfo, seasonNum uint, episode bangumi.Episode) error {
 	l := dl.logger.With().Str("title", info.Title).Uint("season", seasonNum).Uint("episode", episode.Number).Logger()
 
 	l.Info().Msg("using pikpak + aria2 download episode")
 	torr, err := torrent.Load(bytes.NewBuffer(episode.Torrent))
 	if err != nil {
-		return nil, err
+		return err
 	}
 	torrHashBytes := torr.HashInfoBytes()
 	torrInfo, err := torr.UnmarshalInfo()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	magnet := torr.Magnet(&torrHashBytes, &torrInfo).String()
 
@@ -148,7 +150,7 @@ func (dl *SmartDownloader) downloadUsingPikpakAndAria2(info *bangumi.BangumiInfo
 	files, err := dl.pikpak.OfflineDownAndWait(baseName, magnet, time.Minute*3)
 	if err != nil {
 		l.Error().Err(err).Msg("pikpak download error")
-		return nil, err
+		return err
 	}
 	l.Debug().Msg("pikpak download complete")
 
@@ -169,7 +171,7 @@ func (dl *SmartDownloader) downloadUsingPikpakAndAria2(info *bangumi.BangumiInfo
 			if err != nil {
 				l.Error().Err(err).Str("file", newFilename).Msg("add aria2 task error, will remove all tasks")
 				clear()
-				return nil, err
+				return err
 			}
 			l.Debug().Str("file", newFilename).Msg("add aria2 task success")
 			gids = append(gids, gid.GID)
@@ -180,10 +182,12 @@ func (dl *SmartDownloader) downloadUsingPikpakAndAria2(info *bangumi.BangumiInfo
 
 	go dl.waitAria2DownloadComplete(gids, info, seasonNum, episode)
 
-	return &bangumi.DownloadState{
+	state := bangumi.DownloadState{
 		Downloader: "aria2",
 		TaskId:     strings.Join(gids, ","),
-	}, nil
+	}
+	dl.bgmMan.DownloaderTouchEpisode(info, seasonNum, episode, state)
+	return nil
 }
 
 func (dl *SmartDownloader) waitAria2DownloadComplete(gids []string, info *bangumi.BangumiInfo, seasonNum uint, episode bangumi.Episode) {
@@ -222,11 +226,11 @@ func (dl *SmartDownloader) waitAria2DownloadComplete(gids []string, info *bangum
 	}()
 }
 
-func (dl *SmartDownloader) downloadUsingQibittorrent(info *bangumi.BangumiInfo, seasonNum uint, episode bangumi.Episode) (*bangumi.DownloadState, error) {
+func (dl *SmartDownloader) downloadUsingQbittorrent(info *bangumi.BangumiInfo, seasonNum uint, episode bangumi.Episode) error {
 	l := dl.logger.With().Str("title", info.Title).Uint("season", seasonNum).Uint("episode", episode.Number).Logger()
 
 	if episode.TorrentHash != "" {
-		l.Info().Msg("using qibittorrent download episode")
+		l.Info().Msg("using qbittorrent download episode")
 
 		// try download
 		opts := qbittorrent.AddTorrentOptions{
@@ -236,7 +240,7 @@ func (dl *SmartDownloader) downloadUsingQibittorrent(info *bangumi.BangumiInfo, 
 		l.Info().Msg("start download episode")
 		hash, err := dl.qb.AddTorrentEx(&opts, episode.Torrent, bangumi.DirNaming(info, seasonNum))
 		if err != nil {
-			return nil, err
+			return err
 		}
 		go func() {
 			// Wait for torrent parsing complete
@@ -272,22 +276,46 @@ func (dl *SmartDownloader) downloadUsingQibittorrent(info *bangumi.BangumiInfo, 
 	} else {
 		l.Warn().Msg("skip episode, torrent hash is empty")
 	}
-	return &bangumi.DownloadState{
+	state := bangumi.DownloadState{
 		Downloader: "qb",
 		TaskId:     episode.TorrentHash,
-	}, nil
+	}
+	dl.bgmMan.DownloaderTouchEpisode(info, seasonNum, episode, state)
+	return nil
 }
 
 func (dl *SmartDownloader) waitQbDownloadComplete(hash string, info *bangumi.BangumiInfo, seasonNum uint, episode bangumi.Episode) {
 	l := dl.logger.With().Str("title", info.Title).Uint("season", seasonNum).Uint("episode", episode.Number).Logger()
-	err := dl.qb.WaitForDownloadComplete(hash, time.Second*5, func() bool {
-		l.Info().Msg("download complete")
-		dl.onComplete(info, seasonNum, episode)
-		return true
+	timeout := time.Now().Add(time.Hour)
+	isTimeout := false
+	err := dl.qb.WatchTorrent(hash, time.Second*5, func(torr *qbittorrent.Torrent) bool {
+		if torr.CompletionOn != 0 {
+			l.Info().Msg("download complete")
+			dl.onComplete(info, seasonNum, episode)
+			return true
+		}
+		if time.Now().After(timeout) {
+			isTimeout = true
+			return true
+		}
+		return false
 	})
+
 	if err != nil {
 		l.Warn().Err(err).Msg("wait for download complete error, torrent maybe remove")
 		dl.onErr(err, info, seasonNum, episode)
+	}
+	if isTimeout {
+		l.Warn().Err(err).Msg("wait for download complete timeout, try fallback to pikpak + aria2")
+
+		// reset downloader state
+		episode.DownloadState = bangumi.DownloadState{}
+		go func() {
+			err = dl.DownloadEpisode(info, seasonNum, episode)
+			if err != nil {
+				l.Error().Err(err).Msg("fallback to pikpak + aria2 error")
+			}
+		}()
 	}
 }
 

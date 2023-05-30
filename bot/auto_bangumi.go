@@ -7,6 +7,7 @@ import (
 	"autobangumi-go/downloader"
 	"autobangumi-go/downloader/aria2"
 	"autobangumi-go/downloader/pikpak"
+	"autobangumi-go/downloader/qbittorrent"
 	"autobangumi-go/mdb"
 	"autobangumi-go/rss"
 	"autobangumi-go/utils"
@@ -142,7 +143,7 @@ func NewAutoBangumi(config *AutoBangumiConfig) (*AutoBangumi, error) {
 	}
 
 	// smart downloader
-	dl, err := downloader.NewSmartDownloader(aria2Client, pikpakPool, qb)
+	dl, err := downloader.NewSmartDownloader(aria2Client, pikpakPool, qb, bgmMan)
 	if err != nil {
 		return nil, err
 	}
@@ -186,12 +187,9 @@ func (bot *AutoBangumi) handleBangumiUpdate(bangumi *bangumi.Bangumi) {
 }
 
 func (bot *AutoBangumi) handleEpisodeUpdate(info *bangumi.BangumiInfo, seasonNum uint, episode bangumi.Episode) error {
-	state, err := bot.dl.DownloadEpisode(info, seasonNum, episode)
+	err := bot.dl.DownloadEpisode(info, seasonNum, episode)
 	if err != nil {
 		return err
-	}
-	if state != nil {
-		bot.bgmMan.DownloaderTouchEpisode(info, seasonNum, episode, *state)
 	}
 	return nil
 }
