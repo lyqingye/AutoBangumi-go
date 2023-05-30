@@ -137,6 +137,9 @@ Retry:
 				pool.logger.Warn().Str("username", acc.Username).Str("reason", err.Error()).Msg("restrict account")
 				pool.setAccountRestricted(acc, StateNoSpaceLeft)
 			}
+			if newTask != nil && newTask.Task != nil && newTask.Task.ID != "" {
+				_ = client.OfflineRemove([]string{newTask.Task.ID}, true)
+			}
 			if acc.State == StateNormal {
 				pool.lock.Unlock()
 				return nil, err

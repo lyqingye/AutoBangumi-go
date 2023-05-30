@@ -88,6 +88,16 @@ func (season *Season) IsComplete(epNum uint) bool {
 	return false
 }
 
+func (season *Season) RemoveComplete(epNum uint) {
+	var newArray []uint
+	for _, number := range season.Complete {
+		if epNum != number {
+			newArray = append(newArray, number)
+		}
+	}
+	season.Complete = newArray
+}
+
 func (season *Season) IsEpisodesCollected() bool {
 	return int(season.EpCount) == len(season.Episodes)
 }
@@ -118,6 +128,16 @@ func (e *Episode) IsNeedToDownload() bool {
 	return e.DownloadState.Downloader == ""
 }
 
+func (e *Episode) IsCHSubtitle() bool {
+	for _, sub := range e.SubtitleLang {
+		switch sub {
+		case SubtitleCht, SubtitleChs:
+			return true
+		}
+	}
+	return false
+}
+
 type DownloadState struct {
 	Downloader string `json:"downloader"`
 	TaskId     string `json:"taskId"`
@@ -129,6 +149,16 @@ func (e *Episode) Compare(o *Episode) bool {
 	return ResolutionPriority[e.Resolution] > ResolutionPriority[o.Resolution] ||
 		SubtitlePriority[langI] > SubtitlePriority[langJ] ||
 		e.TorrentPubDate.After(o.TorrentPubDate)
+}
+
+func (e *Episode) CanReplace(replacement *Episode) bool {
+	if !e.IsCHSubtitle() && replacement.IsCHSubtitle() {
+		return true
+	}
+	if ResolutionPriority[replacement.Resolution] > ResolutionPriority[e.Resolution] {
+		return true
+	}
+	return false
 }
 
 func (e *Episode) Validate() error {

@@ -60,7 +60,7 @@ func TestMikanSearch(t *testing.T) {
 	//require.NoError(t, err)
 	//require.NotNil(t, result)
 
-	result, err := parser.Search2("路人女主的养成方法")
+	result, err := parser.Search2("她去公爵家的理由")
 	require.NoError(t, err)
 	require.NotNil(t, result)
 }

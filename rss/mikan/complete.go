@@ -121,10 +121,6 @@ func (parser *MikanRSSParser) mergeSeasonInfo(dest *bangumitypes.Season, source 
 	}
 
 	for _, searchEpisode := range source.Episodes {
-		if dest.IsComplete(searchEpisode.Number) {
-			continue
-		}
-
 		isParsed := false
 		for _, episode := range dest.Episodes {
 			if episode.Number == searchEpisode.Number {
@@ -134,6 +130,16 @@ func (parser *MikanRSSParser) mergeSeasonInfo(dest *bangumitypes.Season, source 
 		}
 		if !isParsed {
 			dest.Episodes = append(dest.Episodes, searchEpisode)
+		}
+
+		for i, episode := range dest.Episodes {
+			if episode.Number == searchEpisode.Number {
+				if episode.CanReplace(&searchEpisode) {
+					dest.Episodes[i] = searchEpisode
+					dest.RemoveComplete(episode.Number)
+				}
+				break
+			}
 		}
 	}
 }
