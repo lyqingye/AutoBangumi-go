@@ -7,7 +7,6 @@ import (
 	"autobangumi-go/downloader"
 	"autobangumi-go/downloader/aria2"
 	"autobangumi-go/downloader/pikpak"
-	"autobangumi-go/downloader/qibittorrent"
 	"autobangumi-go/mdb"
 	"autobangumi-go/rss"
 	"autobangumi-go/utils"
@@ -63,7 +62,7 @@ func (config *AutoBangumiConfig) Validate() error {
 }
 
 type AutoBangumi struct {
-	qb     *qibittorrent.QbittorrentClient
+	qb     *qbittorrent.QbittorrentClient
 	db     *db.DB
 	eb     *bus.EventBus
 	rssMan *rss.RSSManager
@@ -117,7 +116,7 @@ func NewAutoBangumi(config *AutoBangumiConfig) (*AutoBangumi, error) {
 	bot.bgmMan = bgmMan
 
 	// qb
-	qb, err := qibittorrent.NewQbittorrentClient(config.QBEndpoint, config.QBUsername, config.QBPassword, config.QBDownloadDir)
+	qb, err := qbittorrent.NewQbittorrentClient(config.QBEndpoint, config.QBUsername, config.QBPassword, config.QBDownloadDir)
 	if err != nil {
 		return nil, err
 	}

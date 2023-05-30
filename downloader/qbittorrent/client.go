@@ -1,4 +1,4 @@
-package qibittorrent
+package qbittorrent
 
 import (
 	"bytes"
@@ -261,9 +261,6 @@ func (qb *QbittorrentClient) GetTorrentContent(hash string, indexes []int64) ([]
 	params := map[string]string{
 		"hash": hash,
 	}
-	if len(indexArray) != 0 {
-		params["indexes"] = strings.Join(indexArray, "|")
-	}
 	var contents []TorrentContent
 	resp, err := qb.client.R().SetQueryParams(params).SetResult(&contents).Get(qb.endpoint.JoinPath("/api/v2/torrents/files").String())
 	if err != nil {
@@ -273,6 +270,33 @@ func (qb *QbittorrentClient) GetTorrentContent(hash string, indexes []int64) ([]
 		return nil, ErrTorrentNotFound
 	}
 	return contents, nil
+}
+
+func (qb *QbittorrentClient) SetFilePriority(hash string, indexes []int, priority int64) error {
+	params := map[string]string{
+		"hash":     hash,
+		"priority": strconv.FormatInt(priority, 10),
+	}
+	var indexArray []string
+	for _, idx := range indexes {
+		indexArray = append(indexArray, strconv.FormatInt(int64(idx), 10))
+	}
+	if len(indexArray) != 0 {
+		params["id"] = strings.Join(indexArray, "|")
+	}
+	resp, err := qb.client.R().SetFormData(params).Post(qb.endpoint.JoinPath("/api/v2/torrents/filePrio").String())
+	if err != nil {
+		return err
+	}
+	switch resp.StatusCode() {
+	case http.StatusBadRequest:
+		return errors.New("invalid priority")
+	case http.StatusNotFound:
+		return ErrTorrentNotFound
+	case http.StatusConflict:
+		return errors.New("torrent metadata hasn't downloaded yet")
+	}
+	return nil
 }
 
 func (qb *QbittorrentClient) WaitForDownloadComplete(hash string, period time.Duration, callback func() bool) error {

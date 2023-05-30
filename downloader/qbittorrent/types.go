@@ -1,4 +1,4 @@
-package qibittorrent
+package qbittorrent
 
 import (
 	"encoding/hex"

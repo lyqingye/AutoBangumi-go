@@ -1,7 +1,7 @@
-package qibittorrent_test
+package qbittorrent_test
 
 import (
-	"autobangumi-go/downloader/qibittorrent"
+	"autobangumi-go/downloader/qbittorrent"
 	"bytes"
 	"os"
 	"testing"
@@ -13,7 +13,7 @@ import (
 )
 
 func TestQbittorent(t *testing.T) {
-	qb, err := qibittorrent.NewQbittorrentClient("http://nas.lyqingye.com:8888", "admin", "adminadmin", "/downloads")
+	qb, err := qbittorrent.NewQbittorrentClient("http://nas.lyqingye.com:8888", "admin", "adminadmin", "/downloads")
 	require.NoError(t, err)
 	require.NotNil(t, qb)
 	err = qb.Login()
@@ -27,7 +27,7 @@ func TestQbittorent(t *testing.T) {
 	require.NoError(t, err)
 	//"361bfee217db001fceb309f0bebd8b53745c92fb"
 	properties, err := qb.GetTorrentProperties(torrent.HashInfoBytes().HexString())
-	require.Equal(t, err, qibittorrent.ErrTorrentNotFound)
+	require.Equal(t, err, qbittorrent.ErrTorrentNotFound)
 	require.Nil(t, properties)
 
 	// change filename
@@ -47,12 +47,12 @@ func TestQbittorent(t *testing.T) {
 }
 
 func TestListTorrent(t *testing.T) {
-	qb, err := qibittorrent.NewQbittorrentClient("http://nas.lyqingye.com:8888", "admin", "adminadmin", "/downloads")
+	qb, err := qbittorrent.NewQbittorrentClient("http://nas.lyqingye.com:8888", "admin", "adminadmin", "/downloads")
 	require.NoError(t, err)
 	require.NotNil(t, qb)
 	err = qb.Login()
 	require.NoError(t, err)
-	list, err := qb.ListAllTorrent(qibittorrent.FilterStalledDownloadingTorrentList)
+	list, err := qb.ListAllTorrent(qbittorrent.FilterStalledDownloadingTorrentList)
 	for _, torrent := range list {
 		addTime := time.Unix(int64(torrent.AddedOn), 0)
 		println(addTime.String())
@@ -62,7 +62,7 @@ func TestListTorrent(t *testing.T) {
 }
 
 func TestGetTorrentContent(t *testing.T) {
-	qb, err := qibittorrent.NewQbittorrentClient("http://localhost:8080", "admin", "adminadmin", "/downloads")
+	qb, err := qbittorrent.NewQbittorrentClient("http://localhost:8080", "admin", "adminadmin", "/downloads")
 	require.NoError(t, err)
 	require.NotNil(t, qb)
 	err = qb.Login()
@@ -82,4 +82,24 @@ func TestGetTorrentContent(t *testing.T) {
 		require.NoError(t, err)
 	}
 
+}
+
+func TestSetPriority(t *testing.T) {
+	qb, err := qbittorrent.NewQbittorrentClient("http://localhost:8080", "admin", "adminadmin", "/downloads")
+	require.NoError(t, err)
+	require.NotNil(t, qb)
+	err = qb.Login()
+	require.NoError(t, err)
+	torrents, err := qb.ListAllTorrent(qbittorrent.FilterAllTorrentList)
+	require.NoError(t, err)
+	for _, torr := range torrents {
+		files, err := qb.GetTorrentContent(torr.Hash, []int64{})
+		require.NoError(t, err)
+		for _, fi := range files {
+			if fi.Priority != 0 {
+				err = qb.SetFilePriority(torr.Hash, []int{fi.Index}, 0)
+				require.NoError(t, err)
+			}
+		}
+	}
 }
