@@ -60,6 +60,8 @@ func NewPool(configPath string) (*Pool, error) {
 	if err != nil {
 		return nil, err
 	}
+	// recycle storage on startup
+	go pool.recycleAllAccStorage()
 	return &pool, nil
 }
 
@@ -340,4 +342,31 @@ func (pool *Pool) setAccountRestricted(acc *Account, newState string) {
 	acc.RestrictedTime = time.Now()
 	delete(pool.accounts, acc.Username)
 	pool.restrictedAccounts[acc.Username] = *acc
+}
+
+func (pool *Pool) recycleAllAccStorage() {
+	pool.lock.Lock()
+	defer pool.lock.Unlock()
+	for _, acc := range pool.accounts {
+		client, err := pool.getClientByAcc(&acc)
+		if err == nil {
+			_ = pool.recycleAccStorage(client)
+		}
+	}
+}
+
+func (pool *Pool) recycleAccStorage(client *pikpakgo.PikPakClient) error {
+	err := client.OfflineRemoveAll([]string{pikpakgo.PhaseTypeError, pikpakgo.PhaseTypePending, pikpakgo.PhaseTypeRunning}, true)
+	if err != nil {
+		return err
+	}
+	files, err := client.FileListAll("")
+	if err != nil {
+		return err
+	}
+	var ids []string
+	for _, fi := range files {
+		ids = append(ids, fi.ID)
+	}
+	return client.BatchDeleteFiles(ids)
 }

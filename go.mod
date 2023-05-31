@@ -11,13 +11,14 @@ require (
 	github.com/fsnotify/fsnotify v1.5.4
 	github.com/go-resty/resty/v2 v2.7.0
 	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
-	github.com/lyqingye/pikpak-go v0.0.0-20230529132051-4b4f371306c3
+	github.com/lyqingye/pikpak-go v0.0.0-20230531054905-b3581f5356f2
 	github.com/nssteinbrenner/anitogo v0.0.0-20200907113149-eb04a0056b4a
 	github.com/rs/zerolog v1.29.1
 	github.com/siku2/arigo v0.0.0-00010101000000-000000000000
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.2
+	github.com/studio-b12/gowebdav v0.0.0-20230203202212-3282f94193f2
 	github.com/tendermint/tm-db v0.6.7
 
 )
@@ -53,7 +54,6 @@ require (
 	github.com/onsi/gomega v1.17.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/studio-b12/gowebdav v0.0.0-20230203202212-3282f94193f2 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20200815110645-5c35d600f0ca // indirect
 	go.etcd.io/bbolt v1.3.6 // indirect
 	golang.org/x/net v0.9.0 // indirect
