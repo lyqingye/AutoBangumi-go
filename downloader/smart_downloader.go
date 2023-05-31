@@ -299,14 +299,15 @@ func (dl *SmartDownloader) waitQbDownloadComplete(hash string, info *bangumi.Ban
 	l := dl.logger.With().Str("title", info.Title).Uint("season", seasonNum).Uint("episode", episode.Number).Logger()
 	isTimeout := false
 	err := dl.qb.WatchTorrentProperties(hash, time.Second*5, func(torr *qbittorrent.TorrentProperties) bool {
-
 		if torr.CompletionDate != -1 {
 			l.Info().Msg("download complete")
 			dl.onComplete(info, seasonNum, episode)
 			return true
 		}
 
-		if (time.Now().Unix() - int64(torr.CreationDate)) > int64(time.Hour.Seconds()) {
+		expire := (time.Now().Unix() - int64(torr.AdditionDate)) > int64(time.Hour.Seconds())
+
+		if expire && torr.DlSpeed == 0 && (torr.TotalDownloaded/torr.TotalSize*100) < 50 {
 			isTimeout = true
 			return true
 		}
@@ -316,6 +317,7 @@ func (dl *SmartDownloader) waitQbDownloadComplete(hash string, info *bangumi.Ban
 
 	if err != nil {
 		l.Warn().Err(err).Msg("wait for download complete error, torrent maybe remove")
+		dl.bgmMan.DownloaderTouchEpisode(info, seasonNum, episode, bangumi.DownloadState{})
 		dl.onErr(err, info, seasonNum, episode)
 	}
 	if isTimeout {
