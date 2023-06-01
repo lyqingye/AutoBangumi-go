@@ -85,7 +85,6 @@ func RenamingEpisodeFileName(info *BangumiInfo, seasonNum uint, ep *Episode, fil
 					return fmt.Sprintf("%s.%s%s", newName, strings.ToLower(lang), extension)
 				}
 			}
-			return fmt.Sprintf("%s%s", newName, extension)
 		}
 	}
 	return ""
