@@ -15,6 +15,11 @@ const (
 	SubtitleCht     = "CHT"
 	SubtitleUnknown = "unknown"
 
+	SeasonTypeSpecial = "Special"
+	SeasonTypeOVA     = "OVA"
+	SeasonTypeTV      = "TV"
+	SeasonTypeNone    = "None"
+
 	EpisodeTypeSP         = "SP"
 	EpisodeTypeOVA        = "OVA"
 	EpisodeTypeSpecial    = "Special"
@@ -22,7 +27,11 @@ const (
 	EpisodeTypeCollection = "Collection"
 	EpisodeTypeUnknown    = "unknown"
 
-	NoDownloader = "None"
+	BangumiTypeSeries = "series"
+	BangumiTypeTV     = "tv"
+
+	TorrentTypeCollection    = "collection"
+	TorrentTypeSingleEpisode = "single"
 )
 
 var (
