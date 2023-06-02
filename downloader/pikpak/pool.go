@@ -1,14 +1,14 @@
 package pikpak
 
 import (
-	"autobangumi-go/utils"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"autobangumi-go/config"
+	"autobangumi-go/utils"
 
 	"github.com/dustin/go-humanize"
 	"github.com/rs/zerolog"
@@ -22,6 +22,8 @@ const (
 	StateNormal      = "Normal"
 )
 
+var ErrNoAvailableAccount = errors.New("no available account")
+
 type File struct {
 	Id          string
 	Name        string
@@ -30,70 +32,50 @@ type File struct {
 }
 
 type Account struct {
-	Username       string    `json:"username"`
-	Password       string    `json:"password"`
-	State          string    `json:"state"`
-	RestrictedTime time.Time `json:"restricted_time"`
+	Username       string
+	Password       string
+	State          string
+	RestrictedTime int64
+}
+
+func (acc *Account) GetRestrictedTime() time.Time {
+	return time.Unix(acc.RestrictedTime, 0)
+}
+
+type AccountStorage interface {
+	ListAccounts() ([]Account, error)
+	ListAccountsByState(state string) ([]Account, error)
+	UpdateAccount(acc Account) error
+	AddAccount(acc Account) error
+	GetAccount(username string) (Account, error)
 }
 
 type Pool struct {
-	logger             zerolog.Logger
-	lock               sync.RWMutex
-	accounts           map[string]Account
-	restrictedAccounts map[string]Account
-	clients            map[string]*pikpakgo.PikPakClient
-	fileUrlToFile      map[string]*File
-	configPath         string
+	logger        zerolog.Logger
+	lock          sync.RWMutex
+	clients       map[string]*pikpakgo.PikPakClient
+	fileUrlToFile map[string]*File
+	tempDirectory string
+	storage       AccountStorage
+	cfg           config.PikpakConfig
 }
 
-func NewPool(configPath string) (*Pool, error) {
+func NewPool(storage AccountStorage, cfg config.PikpakConfig) (*Pool, error) {
 	pool := Pool{
-		logger:             utils.GetLogger("pikpak-pool"),
-		lock:               sync.RWMutex{},
-		accounts:           map[string]Account{},
-		restrictedAccounts: map[string]Account{},
-		clients:            map[string]*pikpakgo.PikPakClient{},
-		fileUrlToFile:      map[string]*File{},
-		configPath:         configPath,
-	}
-	err := pool.loadAccountsFromConfigFile()
-	if err != nil {
-		return nil, err
+		logger:        utils.GetLogger("pikpak-pool"),
+		lock:          sync.RWMutex{},
+		clients:       map[string]*pikpakgo.PikPakClient{},
+		fileUrlToFile: map[string]*File{},
+		tempDirectory: "/temp",
+		storage:       storage,
+		cfg:           cfg,
 	}
 	// recycle storage on startup
 	go pool.recycleAllAccStorage()
 	return &pool, nil
 }
 
-func (pool *Pool) loadAccountsFromConfigFile() error {
-	bz, err := os.ReadFile(pool.configPath)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	var accounts []Account
-	err = json.Unmarshal(bz, &accounts)
-	if err != nil {
-		return err
-	}
-	for _, acc := range accounts {
-		pool.logger.Info().Str("username", acc.Username).Msg("load pikpak account")
-		pool.accounts[acc.Username] = acc
-	}
-	return nil
-}
-
-func (pool *Pool) AddAccount(username, password string) {
-	pool.lock.Lock()
-	defer pool.lock.Unlock()
-	pool.accounts[username] = Account{
-		Username:       username,
-		Password:       password,
-		State:          StateNormal,
-		RestrictedTime: time.Time{},
-	}
-}
-
-func (pool *Pool) OfflineDownAndWait(name, magnet string, timeout time.Duration) ([]*File, error) {
+func (pool *Pool) OfflineDownAndWait(name, magnet string) ([]*File, error) {
 	pool.lock.Lock()
 	pool.logger.Info().Str("name", name).Msg("try to add offline task")
 
@@ -130,7 +112,11 @@ Retry:
 	if task == nil {
 		// offline download and wait
 		pool.logger.Debug().Str("name", name).Msg("add offline task")
-		newTask, err := client.OfflineDownload(name, magnet, "")
+		pid, err := client.FolderPathToID(pool.tempDirectory, true)
+		if err != nil {
+			goto Retry
+		}
+		newTask, err := client.OfflineDownload(name, magnet, pid)
 		if err != nil {
 			if errors.Is(err, pikpakgo.ErrDailyCreateLimit) {
 				pool.logger.Warn().Str("username", acc.Username).Str("reason", err.Error()).Msg("restrict account")
@@ -157,12 +143,12 @@ Retry:
 	pool.lock.Unlock()
 
 	pool.logger.Info().Str("name", name).Msg("wait for offline task finished")
-	finishedTask, err := client.WaitForOfflineDownloadComplete(task.ID, timeout, func(t *pikpakgo.Task) {
+	finishedTask, err := client.WaitForOfflineDownloadComplete(task.ID, pool.cfg.OfflineDownloadTimeout, func(t *pikpakgo.Task) {
 		pool.logger.Debug().Int("progress", t.Progress).Str("name", t.FileName).Msg("task update")
 	})
 
 	if err != nil {
-		if err == pikpakgo.ErrWaitForOfflineDownloadTimeout {
+		if errors.Is(err, pikpakgo.ErrWaitForOfflineDownloadTimeout) {
 			_ = client.OfflineRemove([]string{task.ID}, true)
 		}
 		return nil, err
@@ -220,14 +206,11 @@ func (pool *Pool) RemoveFile(downloadUrl string) error {
 		return errors.New("file not found")
 	}
 
-	var acc *Account
-	if a, found := pool.accounts[file.RefAcc]; found {
-		acc = &a
-	} else if b, found := pool.restrictedAccounts[file.RefAcc]; found {
-		acc = &b
-	}
-	if acc != nil {
-		client, err := pool.getClientByAcc(acc)
+	acc, err := pool.storage.GetAccount(file.RefAcc)
+	if err != nil {
+		return fmt.Errorf("acc not found: %s", file.RefAcc)
+	} else {
+		client, err := pool.getClientByAcc(&acc)
 		if err != nil {
 			return err
 		}
@@ -237,24 +220,33 @@ func (pool *Pool) RemoveFile(downloadUrl string) error {
 		}
 		delete(pool.fileUrlToFile, downloadUrl)
 
-	} else {
-		return fmt.Errorf("acc not found: %s", file.RefAcc)
 	}
 	pool.logger.Info().Str("username", acc.Username).Str("name", file.Name).Msg("recycle account storage")
-	return pool.refreshAccount(acc)
+	return pool.refreshAccount(&acc)
 }
 
 func (pool *Pool) chooseAccount() (*Account, error) {
-	if len(pool.accounts) == 0 {
+	accounts, err := pool.storage.ListAccountsByState(StateNormal)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(accounts) == 0 {
 		err := pool.refreshAccounts()
 		if err != nil {
 			return nil, err
 		}
 	}
-	if len(pool.accounts) == 0 {
-		return nil, errors.New("no available pikpak accounts")
+
+	accounts, err = pool.storage.ListAccountsByState(StateNormal)
+	if err != nil {
+		return nil, err
 	}
-	for _, acc := range pool.accounts {
+
+	if len(accounts) == 0 {
+		return nil, ErrNoAvailableAccount
+	}
+	for _, acc := range accounts {
 		pool.logger.Debug().Str("username", acc.Username).Msg("select pikpak account")
 		return &acc, nil
 	}
@@ -289,7 +281,11 @@ func (pool *Pool) getClientByAcc(acc *Account) (*pikpakgo.PikPakClient, error) {
 }
 
 func (pool *Pool) refreshAccounts() error {
-	for _, acc := range pool.restrictedAccounts {
+	accounts, err := pool.storage.ListAccounts()
+	if err != nil {
+		return err
+	}
+	for _, acc := range accounts {
 		err := pool.refreshAccount(&acc)
 		if err != nil {
 			return err
@@ -325,29 +321,36 @@ func (pool *Pool) refreshAccount(acc *Account) error {
 		}
 	} else if acc.State == StateRestricted {
 		now := utils.GetMidnightTime()
-		restrictedTime := utils.TimeToMidnightTime(acc.RestrictedTime)
+		restrictedTime := utils.TimeToMidnightTime(acc.GetRestrictedTime())
 		if now.Sub(restrictedTime).Hours() < 24 {
 			return nil
 		}
 		pool.logger.Info().Str("username", acc.Username).Msg("account recover from Restricted state")
+	} else {
+		return nil
 	}
 	acc.State = StateNormal
-	delete(pool.restrictedAccounts, acc.Username)
-	pool.accounts[acc.Username] = *acc
-	return nil
+	return pool.storage.UpdateAccount(*acc)
 }
 
 func (pool *Pool) setAccountRestricted(acc *Account, newState string) {
-	acc.State = newState
-	acc.RestrictedTime = time.Now()
-	delete(pool.accounts, acc.Username)
-	pool.restrictedAccounts[acc.Username] = *acc
+	updateAcc := *acc
+	updateAcc.State = newState
+	updateAcc.RestrictedTime = time.Now().Unix()
+	if err := pool.storage.UpdateAccount(updateAcc); err != nil {
+		pool.logger.Error().Err(err).Msg("update account error")
+	}
 }
 
 func (pool *Pool) recycleAllAccStorage() {
 	pool.lock.Lock()
 	defer pool.lock.Unlock()
-	for _, acc := range pool.accounts {
+	accounts, err := pool.storage.ListAccounts()
+	if err != nil {
+		pool.logger.Error().Err(err).Msg("recycle all accounts")
+		return
+	}
+	for _, acc := range accounts {
 		client, err := pool.getClientByAcc(&acc)
 		if err == nil {
 			_ = pool.recycleAccStorage(client)
@@ -356,16 +359,23 @@ func (pool *Pool) recycleAllAccStorage() {
 }
 
 func (pool *Pool) recycleAccStorage(client *pikpakgo.PikPakClient) error {
-	err := client.OfflineRemoveAll([]string{pikpakgo.PhaseTypeError, pikpakgo.PhaseTypePending, pikpakgo.PhaseTypeRunning}, true)
+	err := client.OfflineRemoveAll([]string{pikpakgo.PhaseTypeError}, true)
 	if err != nil {
 		return err
 	}
-	files, err := client.FileListAll("")
+	fileId, err := client.FolderPathToID(pool.tempDirectory, true)
+	if err != nil {
+		return err
+	}
+	files, err := client.FileListAll(fileId)
 	if err != nil {
 		return err
 	}
 	var ids []string
 	for _, fi := range files {
+		if fi.FolderType == pikpakgo.FolderTypeDownload {
+			continue
+		}
 		ids = append(ids, fi.ID)
 	}
 	return client.BatchDeleteFiles(ids)

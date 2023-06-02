@@ -1,0 +1,77 @@
+version: '3.5'
+services:
+  db:
+    container_name: db
+    image: postgres:15rc1
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./db_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=lyqingye
+      - POSTGRES_PASSWORD=lyqingye
+      - POSTGRES_DB=auto_bangumi
+      - PGDATA=/var/lib/postgresql/data
+    user: 1000:1000
+    command: ["postgres", "-N", "500"]
+    restart: unless-stopped
+
+  aria2:
+    container_name: aria2
+    image: p3terx/aria2-pro@sha256:086d1a37c586edb07ec0fb956bf9edd89d1d38d138ad5309ff96d510c8c9a011
+    ports:
+      - "6888:6888"
+      - "6800:6800"
+    environment:
+      - TZ=Asia/Shanghai
+      - UPDATE_TRACKERS=false
+      - LISTEN_PORT=6888
+      - RPC_PORT=6800
+      - RPC_SECRET=123456
+      - PUID=1000
+      - PGID=1000
+      - UMASK_SET=022
+    volumes:
+      - ./aria2:/config
+      - ./downloads:/downloads
+    restart: unless-stopped
+
+  aria2-webui:
+    container_name: aria2-webui
+    image: p3terx/ariang@sha256:7f42f927160af477e0775bd6c92e7236b46514a179df1001799664eff8c78646
+    ports:
+      - "6880:6880"
+    restart: unless-stopped
+
+  qb:
+    container_name: qb
+    image: linuxserver/qbittorrent:version-4.5.2-r2
+    volumes:
+      - ./downloads:/downloads
+      - ./qb:/config
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - XDG_CONFIG_HOME=/config
+      - XDG_DATA_HOME=/config
+      - WEBUI_PORT=8888
+    ports:
+      - "8888:8888"
+      - "6881:6881"
+      - "6881:6881/udp"
+    restart: unless-stopped
+
+  autobangumi:
+    container_name: auto-bangumi
+    image: ghcr.io/lyqingye/autobangumi-go
+    command:
+      - "--config"
+      - "/config/config.local.toml"
+    volumes:
+      - ./config.local.toml:/config/config.local.toml
+      - ./cache:/cache
+    restart: unless-stopped
+    depends_on:
+      - aria2
+      - qb
+      - db

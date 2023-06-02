@@ -1,137 +1,71 @@
 package mikan_test
 
 import (
-	"autobangumi-go/bus"
-	"autobangumi-go/db"
-	"autobangumi-go/mdb"
-	"autobangumi-go/rss/mikan"
-	"io"
-	"net/http"
-	"os"
 	"regexp"
 	"strings"
 	"testing"
 
-	bangumitypes "autobangumi-go/bangumi"
-
-	"github.com/stretchr/testify/require"
+	"autobangumi-go/mdb"
+	"autobangumi-go/rss/mikan"
+	"autobangumi-go/rss/mikan/cache"
+	"github.com/stretchr/testify/suite"
 )
 
-func TestParseMikanRss(t *testing.T) {
-	dir := "./parser_cache"
-	db, err := db.NewDB(dir)
-	require.NoError(t, err)
-	require.NotNil(t, db)
-	defer func() {
-		_ = db.Close()
-		_ = os.RemoveAll(dir)
-	}()
-	tmdbClient, err := mdb.NewTMDBClient("702225c8ca516a5be2f062988438bfda")
-	require.NoError(t, err)
-	bangumiTVClient, err := mdb.NewBangumiTVClient("https://api.bgm.tv/v0")
-	require.NoError(t, err)
-	eb := bus.NewEventBus()
-	eb.Start()
-	parser, err := mikan.NewMikanRSSParser("https://mikanani.me/RSS/Bangumi?bangumiId=444", eb, db, tmdbClient, bangumiTVClient)
-	require.NoError(t, err)
-	rssInfo, err := parser.Parse()
-	require.NoError(t, err)
-	require.NotNil(t, rssInfo)
+type TestMikanParserSuite struct {
+	suite.Suite
+	parser *mikan.MikanRSSParser
 }
 
-func TestMikanSearch(t *testing.T) {
-	dir := "./parser_cache"
-	db, err := db.NewDB(dir)
-	require.NoError(t, err)
-	require.NotNil(t, db)
-	defer func() {
-		_ = db.Close()
-		_ = os.RemoveAll(dir)
-	}()
+func NewTestMikanParser() (*mikan.MikanRSSParser, error) {
 	tmdbClient, err := mdb.NewTMDBClient("702225c8ca516a5be2f062988438bfda")
-	require.NoError(t, err)
-	bangumiTVClient, err := mdb.NewBangumiTVClient("https://api.bgm.tv/v0")
-	require.NoError(t, err)
-	eb := bus.NewEventBus()
-	eb.Start()
-	parser, err := mikan.NewMikanRSSParser("https://mikanani.me/RSS/Bangumi?bangumiId=444", eb, db, tmdbClient, bangumiTVClient)
-	require.NoError(t, err)
-	//result, err := parser.Search("式守同学不只可爱而已")
-	//require.NoError(t, err)
-	//require.NotNil(t, result)
-
-	result, err := parser.Search2("她去公爵家的理由")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-}
-
-func TestMikanSearch3(t *testing.T) {
-	dir := "./parser_cache"
-	db, err := db.NewDB(dir)
-	require.NoError(t, err)
-	require.NotNil(t, db)
-	defer func() {
-		_ = db.Close()
-		_ = os.RemoveAll(dir)
-	}()
-	tmdbClient, err := mdb.NewTMDBClient("702225c8ca516a5be2f062988438bfda")
-	require.NoError(t, err)
-	bangumiTVClient, err := mdb.NewBangumiTVClient("https://api.bgm.tv/v0")
-	require.NoError(t, err)
-	eb := bus.NewEventBus()
-	eb.Start()
-	parser, err := mikan.NewMikanRSSParser("https://mikanani.me/RSS/Bangumi?bangumiId=444", eb, db, tmdbClient, bangumiTVClient)
-	require.NoError(t, err)
-
-	result, err := parser.Search3("2984")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-}
-
-func TestMikanCompleteBangumi(t *testing.T) {
-	resp, err := http.Get("https://mikanani.me/RSS/Search?searchstr=%E6%88%91%E7%9A%84%E9%9D%92%E6%98%A5")
-	require.NoError(t, err)
-	require.NotNil(t, resp)
-	bz, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	require.NotNil(t, bz)
-
-	dir := "./parser_cache"
-	db, err := db.NewDB(dir)
-	require.NoError(t, err)
-	require.NotNil(t, db)
-	defer func() {
-		_ = db.Close()
-		_ = os.RemoveAll(dir)
-	}()
-	tmdbClient, err := mdb.NewTMDBClient("702225c8ca516a5be2f062988438bfda")
-	require.NoError(t, err)
-	bangumiTVClient, err := mdb.NewBangumiTVClient("https://api.bgm.tv/v0")
-	require.NoError(t, err)
-	eb := bus.NewEventBus()
-	eb.Start()
-	parser, err := mikan.NewMikanRSSParser("https://mikanani.me/RSS/Bangumi?bangumiId=444", eb, db, tmdbClient, bangumiTVClient)
-	require.NoError(t, err)
-	bangumi := bangumitypes.Bangumi{
-		Info: bangumitypes.BangumiInfo{
-			Title: "乙女游戏世界对路人角色很不友好",
-		},
+	if err != nil {
+		return nil, err
 	}
-	err = parser.CompleteBangumi(&bangumi)
-	require.NoError(t, err)
-	season := bangumi.Seasons[1]
-	season.Complete = append(season.Complete, 1, 2, 3, 4)
-	season.Episodes = nil
-	bangumi.Seasons[1] = season
-	err = parser.CompleteBangumi(&bangumi)
-	require.NoError(t, err)
+	bangumiTVClient, err := mdb.NewBangumiTVClient("https://api.bgm.tv/v0")
+	if err != nil {
+		return nil, err
+	}
+	cm := cache.NewInMemoryCacheManager()
+	parser, err := mikan.NewMikanRSSParser("https://mikanani.me", tmdbClient, bangumiTVClient, cm)
+	if err != nil {
+		return nil, err
+	}
+	return parser, nil
+}
+
+func (suite *TestMikanParserSuite) SetupTest() {
+	parser, err := NewTestMikanParser()
+	suite.NoError(err)
+	suite.parser = parser
+}
+
+func TestMikanParser(t *testing.T) {
+	suite.Run(t, new(TestMikanParserSuite))
+}
+
+func (suite *TestMikanParserSuite) TestSearchBangumi() {
+	rs, err := suite.parser.Search2("因想当冒险者而前往大都市的女儿已经升到了S级")
+	suite.NoError(err)
+	suite.NotNil(rs)
+}
+
+func (suite *TestMikanParserSuite) TestSearchBangumiByID() {
+	result, err := suite.parser.Search3("2984")
+	suite.NoError(err)
+	suite.NotNil(result)
+}
+
+func (suite *TestMikanParserSuite) TestSearchByTitle() {
+	rs, err := suite.parser.Search("式守同学不只可爱而已", 0)
+	suite.NoError(err)
+	suite.NotNil(rs)
 }
 
 func TestNormalizationSearchTitle(t *testing.T) {
 	t.Log(normalizationSearchTitle("总之就是非常可爱 第二季"))
 	t.Log(normalizationSearchTitle("总之就是非常可爱 第三季"))
 	t.Log(normalizationSearchTitle("总之就是非常可爱 第三期"))
-	t.Log(normalizationSearchTitle("总之就是非常可爱 Season 3"))
+	t.Log(normalizationSearchTitle("总之就是非常可爱 SeasonNum 3"))
 	t.Log(normalizationSearchTitle("总之就是非常可爱 Season3"))
 }
 
@@ -139,15 +73,11 @@ func normalizationSearchTitle(keyword string) string {
 	patterns := []string{
 		"第([[:digit:]]+|\\p{Han}+)季",
 		"第([[:digit:]]+|\\p{Han}+)期",
-		"Season\\s*\\d+",
+		"SeasonNum\\s*\\d+",
 	}
 	for _, pattern := range patterns {
 		re := regexp.MustCompile(pattern)
 		keyword = strings.ReplaceAll(keyword, re.FindString(keyword), "")
 	}
 	return keyword
-}
-
-func TestCollectionRegexp(t *testing.T) {
-
 }

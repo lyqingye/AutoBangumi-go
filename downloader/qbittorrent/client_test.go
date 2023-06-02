@@ -103,3 +103,10 @@ func TestSetPriority(t *testing.T) {
 		}
 	}
 }
+
+func TestGetTorrentHash(t *testing.T) {
+	bz, err := os.ReadFile("/home/lyqingye/Downloads/E_DODI_E108.torrent")
+	torr, err := torrent.Load(bytes.NewBuffer(bz))
+	require.NoError(t, err)
+	t.Log(torr.HashInfoBytes().String())
+}

@@ -1,11 +1,7 @@
 package mikan
 
 import (
-	bangumitypes "autobangumi-go/bangumi"
-	"autobangumi-go/mdb"
-	"autobangumi-go/utils"
 	"bytes"
-	"errors"
 	"fmt"
 	"math"
 	"regexp"
@@ -13,39 +9,38 @@ import (
 	"strings"
 	"time"
 
+	bangumitypes "autobangumi-go/bangumi"
+	"autobangumi-go/mdb"
+	"autobangumi-go/utils"
+	"github.com/pkg/errors"
+	"golang.org/x/exp/maps"
+
 	"github.com/PuerkitoBio/goquery"
 	torrent "github.com/anacrolix/torrent/metainfo"
 	"github.com/nssteinbrenner/anitogo"
 )
 
-func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map[int64]*bangumitypes.Bangumi) error {
+func (parser *MikanRSSParser) parserItemLink(item MikanRssItem) (*ParseItemResult, error) {
 	var err error
+	ret := ParseItemResult{}
 	item.Title = strings.ReplaceAll(item.Title, "【", "[")
 	item.Title = strings.ReplaceAll(item.Title, "】", "]")
-
 	// skip collection
 	re := regexp.MustCompile(`\d{1,3}-\d{1,3}`)
 	if re.MatchString(item.Title) {
 		parser.logger.Warn().Str("link", item.Link).Str("title", item.Title).Msg("ignore collection")
-		return nil
+		return nil, errors.New("collection not support")
 	}
 
-	var episode bangumitypes.Episode
-	var bangumiInfo bangumitypes.BangumiInfo
-	var seasonNumber uint
-	var epCount uint
-	var mikanBangumiId string
-	var subjectId int64
-
-	cache, found := parser.getParseCache(item.Link)
-	if !found {
+	cache, err := parser.cm.GetParseCache(item.Link)
+	if err != nil {
 		// Episode information from rss item
-		episode.RawFilename = item.Title
+		ret.Resource.RawFilename = item.Title
 		pubDate, err := utils.SmartParseDate(item.Torrent.PubDate)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		episode.TorrentPubDate = pubDate
+		ret.Resource.TorrentPubDate = pubDate
 
 		// Parse Episode from item description webpage, result information is reliable
 		// - Title (nullable)
@@ -58,63 +53,58 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 		fromWebPage, err := parser.parseEpisodeByItem(item.Link)
 		if err != nil {
 			parser.logger.Warn().Err(err).Str("link", item.Link).Str("title", item.Title).Msg("parse episode error")
-			return err
+			return nil, errors.Wrap(err, "parse item")
 		}
 
-		episode.Magnet = fromWebPage.Episode.Magnet
-		episode.Torrent = fromWebPage.Episode.Torrent
-		episode.TorrentHash = fromWebPage.Episode.TorrentHash
-		episode.FileSize = fromWebPage.Episode.FileSize
-		mikanBangumiId = fromWebPage.MikanBangumiId
-		subjectId = fromWebPage.SubjectId
+		ret.Resource.Magnet = fromWebPage.Resource.Magnet
+		ret.Resource.Torrent = fromWebPage.Resource.Torrent
+		ret.Resource.TorrentHash = fromWebPage.Resource.TorrentHash
+		ret.Resource.FileSize = fromWebPage.Resource.FileSize
+		ret.MikanBangumiId = fromWebPage.MikanBangumiId
+		ret.SubjectId = fromWebPage.SubjectId
 
 		// Parse Episode from filename, result information is unreliable
 		// - BangumiTitle (nullable)
 		// - Episode Number (nullable)
-		// - Season Number (nullable)
+		// - SeasonNum Number (nullable)
 		// - Lang (nullable)
 		// - Resolution (nullable)
-		// - EpisodeType (nullable)
+		// - ResourceType (nullable)
 		// - Subgroup (nullable)
 
 		fromFilename, err := parser.parseEpisodeByFilename(item.Title)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		// Skip collections
-		if fromFilename.Episode.Type == bangumitypes.EpisodeTypeCollection {
+		if fromFilename.Resource.Type == bangumitypes.ResourceTypeCollection {
 			parser.logger.Warn().Err(err).Str("title", item.Title).Msg("skip collection")
-			return nil
+			return nil, errors.New("collection not support")
 		}
 
-		if fromFilename.Episode.Number == 0 {
+		if fromFilename.EpNum == 0 {
 			parser.logger.Warn().Str("filename", item.Title).Msg("parse episode number from filename err")
-			return errors.New("parse episode number from filename err")
+			return nil, errors.New("parse episode number from filename err")
 		}
 
-		episode.Number = fromFilename.Episode.Number
-		episode.SubtitleLang = fromFilename.Episode.SubtitleLang
-		episode.Resolution = fromFilename.Episode.Resolution
-		episode.Subgroup = fromFilename.Episode.Subgroup
-		episode.Type = fromFilename.Episode.Type
+		ret.EpNum = fromFilename.EpNum
+		ret.Resource.SubtitleLang = fromFilename.Resource.SubtitleLang
+		ret.Resource.Resolution = fromFilename.Resource.Resolution
+		ret.Resource.Subgroup = fromFilename.Resource.Subgroup
+		ret.Resource.Type = fromFilename.Resource.Type
 
-		if fromWebPage.Bangumi.Title == "" && fromFilename.Bangumi.Title == "" {
-			return errors.New("could not found title from link page and filename")
+		if fromWebPage.Title == "" && fromFilename.Title == "" {
+			return nil, errors.New("could not found title from link page and filename")
 		}
 
-		if fromWebPage.Bangumi.Title != "" {
-			bangumiInfo.Title = fromWebPage.Bangumi.Title
-		} else if fromFilename.Bangumi.Title != "" {
-			bangumiInfo.Title = fromFilename.Bangumi.Title
+		if fromWebPage.Title != "" {
+			ret.Title = fromWebPage.Title
+		} else if fromFilename.Title != "" {
+			ret.Title = fromFilename.Title
 		}
 	} else {
-		episode = cache.Episode
-		bangumiInfo = cache.Bangumi
-		seasonNumber = cache.Season
-		epCount = cache.EpCount
-		subjectId = cache.SubjectId
-		mikanBangumiId = cache.MikanBangumiId
+		ret = cache
 	}
 
 	// Try to predict Episode season number using bangumi TV and tmdb
@@ -122,38 +112,38 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 	// 2. get seasons from tmdb
 	// 3. using air data to predict season number
 	//
-	if subjectId == 0 || seasonNumber == 0 {
+	if ret.SubjectId == 0 || ret.SeasonNum == 0 {
 		// the subject id comes from parsing item link page
 		// if the subgroup does not have a link associated with bangumi-tv when publishing resources
 		// then we will try searching based on the title
 		var subject *mdb.Subjects
-		if subjectId != 0 {
-			subject, err = parser.getBangumiTVSubject(subjectId)
+		if ret.SubjectId != 0 {
+			subject, err = parser.getBangumiTVSubjects(ret.SubjectId)
 			if err != nil {
-				return err
+				return nil, err
 			}
 		} else {
-			subject, err = parser.searchBangumiTV(bangumiInfo.Title)
+			subject, err = parser.searchBangumiTV(ret.Title)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			subjectId = subject.ID
+			ret.SubjectId = subject.ID
 
 			// cache mikan bangumiId -> BangumiTV Id
-			if mikanBangumiId != "" {
-				_ = parser.db.Set(getMikanBangumiToBangumiTVCache(mikanBangumiId), &subjectId)
+			if ret.MikanBangumiId != "" {
+				_ = parser.cm.StoreMikanBangumiToBangumiTV(ret.MikanBangumiId, ret.SubjectId)
 			}
 		}
 
 		// now we get episode air date
 		subjectAirDate, err := utils.SmartParseDate(subject.Date)
+		if err != nil {
+			return nil, errors.Wrap(err, "parse date")
+		}
 
 		var searchTitles []string
-		searchTitles = append(searchTitles, bangumiInfo.Title, subject.NameCn, subject.Name)
+		searchTitles = append(searchTitles, ret.Title, subject.NameCn, subject.Name)
 		searchTitles = append(searchTitles, subject.GetAliasNames()...)
-		if err != nil {
-			return err
-		}
 
 		// try search seasons from tmdb
 		for _, searchTitle := range searchTitles {
@@ -162,9 +152,9 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 			}
 			tvDetails, err := parser.searchTMDB(searchTitle)
 			if err == nil {
-				bangumiInfo.TmDBId = tvDetails.ID
+				ret.TmDBId = tvDetails.ID
 				// using tmdb Title as bangumi title
-				bangumiInfo.Title = tvDetails.Name
+				ret.Title = tvDetails.Name
 
 				// predict season number using air date
 				minDiff := time.Duration(math.MaxInt64)
@@ -184,7 +174,7 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 					// using episode air date to predict episode season
 					seasonAriDate, err := utils.SmartParseDate(season.AirDate)
 					if err != nil {
-						return err
+						return nil, err
 					}
 					diff := subjectAirDate.Sub(seasonAriDate).Abs()
 					if diff <= minDiff {
@@ -194,11 +184,11 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 				}
 
 				if closeIndex != -1 {
-					seasonNumber = uint(tvDetails.Seasons[closeIndex].SeasonNumber)
-					epCount = uint(tvDetails.Seasons[closeIndex].EpisodeCount)
+					ret.SeasonNum = uint(tvDetails.Seasons[closeIndex].SeasonNumber)
+					ret.EpCount = uint(tvDetails.Seasons[closeIndex].EpisodeCount)
 				}
 
-				if seasonNumber != 0 {
+				if ret.SeasonNum != 0 {
 					break
 				}
 
@@ -208,64 +198,27 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem, cacheBangumi map
 		}
 	}
 
-	if seasonNumber == 0 {
-		err = fmt.Errorf("unknown season, mikan link: %s", item.Link)
-		parser.logger.Err(err).Msg("parse error")
-		return err
+	if ret.SeasonNum == 0 || ret.EpCount == 0 {
+		return nil, errors.Errorf("unknown season, mikan link: %s", item.Link)
 	}
 
-	var bangumi *bangumitypes.Bangumi
-	if existBangumi, found := cacheBangumi[bangumiInfo.TmDBId]; found {
-		bangumi = existBangumi
-	} else {
-		bangumi = &bangumitypes.Bangumi{
-			Info:    bangumiInfo,
-			Seasons: make(map[uint]bangumitypes.Season),
-		}
-	}
-
-	if err := episode.Validate(); err != nil {
-		parser.logger.Warn().Err(err).Str("link", item.Link).Str("title", item.Title).Msg("parse episode error")
-		return err
-	}
-
-	seasonInfo := bangumi.Seasons[seasonNumber]
-	seasonInfo.MikanBangumiId = mikanBangumiId
-	seasonInfo.SubjectId = subjectId
-	seasonInfo.Number = seasonNumber
-	seasonInfo.EpCount = epCount
-	seasonInfo.Episodes = append(seasonInfo.Episodes, episode)
-
-	bangumi.Info = bangumiInfo
-	bangumi.Seasons[seasonNumber] = seasonInfo
-
-	cacheBangumi[bangumiInfo.TmDBId] = bangumi
-
-	// save parse cache
-	cache.Season = seasonNumber
-	cache.EpCount = epCount
-	cache.SubjectId = subjectId
-	cache.MikanBangumiId = mikanBangumiId
-	cache.Bangumi = bangumiInfo
-	cache.Episode = episode
-
-	parser.storeParseCache(item.Link, cache)
-	return nil
+	return &ret, parser.cm.StoreParseCache(item.Link, ret)
 }
 
 type ParseItemResult struct {
-	Bangumi        bangumitypes.BangumiInfo
-	Episode        bangumitypes.Episode
-	Season         uint
-	EpCount        uint
+	Title          string
+	TmDBId         int64
 	SubjectId      int64
 	MikanBangumiId string
+
+	SeasonNum uint
+	EpNum     uint
+	EpCount   uint
+	Resource  TorrentResource
 }
 
 func (parser *MikanRSSParser) parseEpisodeByItem(link string) (*ParseItemResult, error) {
 	result := ParseItemResult{}
-	bangumi := bangumitypes.BangumiInfo{}
-	episode := bangumitypes.Episode{}
 
 	resp, err := parser.http.R().Get(link)
 	if err != nil {
@@ -278,7 +231,7 @@ func (parser *MikanRSSParser) parseEpisodeByItem(link string) (*ParseItemResult,
 	titleSelector := doc.Find("#sk-container > div.pull-left.leftbar-container > p.bangumi-title > a.w-other-c")
 	subGroupSelector := doc.Find("#sk-container > div.pull-left.leftbar-container > p.bangumi-info > a.magnet-link-wrap")
 	buttonSelector := doc.Find("#sk-container > div.pull-left.leftbar-container > div.leftbar-nav > a.episode-btn")
-	bangumi.Title = titleSelector.Text()
+	result.Title = titleSelector.Text()
 
 	var mikanBangumiLink string
 	for _, node := range titleSelector.Nodes {
@@ -291,7 +244,7 @@ func (parser *MikanRSSParser) parseEpisodeByItem(link string) (*ParseItemResult,
 		}
 	}
 
-	episode.Subgroup = subGroupSelector.Text()
+	result.Resource.Subgroup = subGroupSelector.Text()
 	for _, node := range buttonSelector.Nodes {
 		for _, attr := range node.Attr {
 			if attr.Key == "href" {
@@ -301,8 +254,8 @@ func (parser *MikanRSSParser) parseEpisodeByItem(link string) (*ParseItemResult,
 					if err != nil {
 						return nil, err
 					}
-					episode.Torrent = resp.Body()
-					torr, err := torrent.Load(bytes.NewBuffer(episode.Torrent))
+					result.Resource.Torrent = resp.Body()
+					torr, err := torrent.Load(bytes.NewBuffer(result.Resource.Torrent))
 					if err != nil {
 						return nil, err
 					}
@@ -315,13 +268,13 @@ func (parser *MikanRSSParser) parseEpisodeByItem(link string) (*ParseItemResult,
 						torrentFilesSize += fi.Length
 					}
 					if torrentFilesSize > info.Length {
-						episode.FileSize = uint64(torrentFilesSize)
+						result.Resource.FileSize = uint64(torrentFilesSize)
 					} else {
-						episode.FileSize = uint64(info.Length)
+						result.Resource.FileSize = uint64(info.Length)
 					}
 				}
 				if strings.HasPrefix(attr.Val, "magnet:?xt") {
-					episode.Magnet = attr.Val
+					result.Resource.Magnet = attr.Val
 				}
 			}
 		}
@@ -332,13 +285,11 @@ func (parser *MikanRSSParser) parseEpisodeByItem(link string) (*ParseItemResult,
 			mikanBangumiLink = mikanBangumiLink[:idx]
 		}
 		result.MikanBangumiId = strings.ReplaceAll(mikanBangumiLink, "/Home/Bangumi/", "")
-		key := getMikanBangumiToBangumiTVCache(result.MikanBangumiId)
 		var cachedSubjectId int64
-		var cached bool
 		if result.MikanBangumiId != "" {
-			cached, err = parser.db.Get(key, &cachedSubjectId)
+			cachedSubjectId, err = parser.cm.GetMikanBangumiToBangumiTV(result.MikanBangumiId)
 		}
-		if err == nil && cached {
+		if err == nil {
 			result.SubjectId = cachedSubjectId
 		} else {
 			resp, err = parser.http.R().Get(parser.mikanEndpoint.JoinPath(mikanBangumiLink).String())
@@ -368,25 +319,21 @@ func (parser *MikanRSSParser) parseEpisodeByItem(link string) (*ParseItemResult,
 					return nil, err
 				}
 				result.SubjectId = subjectId
-				_ = parser.db.Set(key, &subjectId)
+				_ = parser.cm.StoreMikanBangumiToBangumiTV(result.MikanBangumiId, subjectId)
 			}
 		}
 	}
 
-	torr, err := torrent.Load(bytes.NewBuffer(episode.Torrent))
+	torr, err := torrent.Load(bytes.NewBuffer(result.Resource.Torrent))
 	if err != nil {
 		return nil, err
 	}
-	episode.TorrentHash = torr.HashInfoBytes().HexString()
-	result.Bangumi = bangumi
-	result.Episode = episode
+	result.Resource.TorrentHash = torr.HashInfoBytes().HexString()
 	return &result, nil
 }
 
 func (parser *MikanRSSParser) parseEpisodeByFilename(filename string) (*ParseItemResult, error) {
-	bangumi := bangumitypes.BangumiInfo{}
-	episode := bangumitypes.Episode{}
-	var seasonNumber uint
+	ret := ParseItemResult{}
 
 	parsedElements := anitogo.Parse(filename, anitogo.DefaultOptions)
 
@@ -394,13 +341,13 @@ func (parser *MikanRSSParser) parseEpisodeByFilename(filename string) (*ParseIte
 		epStr := parsedElements.EpisodeNumber[0]
 		epNumber, err := strconv.ParseUint(epStr, 10, 32)
 		if err == nil && epNumber > 0 {
-			episode.Number = uint(epNumber)
+			ret.EpNum = uint(epNumber)
 		}
 	} else if len(parsedElements.EpisodeNumber) == 2 {
 		startEp, err1 := strconv.ParseUint(parsedElements.EpisodeNumber[0], 10, 32)
 		endEp, err2 := strconv.ParseUint(parsedElements.EpisodeNumber[1], 10, 32)
 		if err1 == nil && err2 == nil && startEp > 0 && endEp > startEp {
-			episode.Type = bangumitypes.EpisodeTypeCollection
+			ret.Resource.Type = bangumitypes.ResourceTypeCollection
 		}
 	}
 
@@ -408,79 +355,128 @@ func (parser *MikanRSSParser) parseEpisodeByFilename(filename string) (*ParseIte
 		seasonStr := parsedElements.AnimeSeason[0]
 		season, err := strconv.ParseUint(seasonStr, 10, 32)
 		if err == nil && season > 0 {
-			seasonNumber = uint(season)
+			ret.SeasonNum = uint(season)
 		}
 	}
 
-	episode.Subgroup = parsedElements.ReleaseGroup
+	ret.Resource.Subgroup = parsedElements.ReleaseGroup
 
 	if len(parsedElements.Language) > 0 {
 		for _, l := range parsedElements.Language {
-			episode.SubtitleLang = append(episode.SubtitleLang, normalizationLang(l))
+			ret.Resource.SubtitleLang = append(ret.Resource.SubtitleLang, normalizationLang(l))
 		}
 	} else {
 		for keyword, lang := range bangumitypes.SubTitleLangKeyword {
 			if strings.Contains(filename, keyword) {
-				episode.SubtitleLang = append(episode.SubtitleLang, lang)
+				ret.Resource.SubtitleLang = append(ret.Resource.SubtitleLang, lang)
 			}
 		}
 	}
 
 	if len(parsedElements.Subtitles) > 0 {
 		for _, l := range parsedElements.Subtitles {
-			episode.SubtitleLang = append(episode.SubtitleLang, normalizationLang(l))
+			ret.Resource.SubtitleLang = append(ret.Resource.SubtitleLang, normalizationLang(l))
 		}
 	} else {
 		for keyword, lang := range bangumitypes.SubTitleLangKeyword {
 			if strings.Contains(filename, keyword) {
-				episode.SubtitleLang = append(episode.SubtitleLang, lang)
+				ret.Resource.SubtitleLang = append(ret.Resource.SubtitleLang, lang)
 			}
 		}
 	}
-	if len(episode.SubtitleLang) == 0 {
-		episode.SubtitleLang = append(episode.SubtitleLang, bangumitypes.SubtitleUnknown)
+	if len(ret.Resource.SubtitleLang) == 0 {
+		ret.Resource.SubtitleLang = append(ret.Resource.SubtitleLang, bangumitypes.SubtitleUnknown)
 	}
-	episode.SubtitleLang = utils.RemoveDuplicate(episode.SubtitleLang)
+	ret.Resource.SubtitleLang = removeDuplicateSubtitleLang(ret.Resource.SubtitleLang)
 
 	if len(parsedElements.AnimeType) == 0 {
-		episode.Type = bangumitypes.EpisodeTypeNone
+		ret.Resource.Type = bangumitypes.ResourceTypeNone
 	} else {
-		episode.Type = normalizationEpisodeType(parsedElements.AnimeType[0])
+		ret.Resource.Type = normalizationEpisodeType(parsedElements.AnimeType[0])
 	}
 
-	episode.Resolution = normalizationResolution(parsedElements.VideoResolution)
+	ret.Resource.Resolution = normalizationResolution(parsedElements.VideoResolution)
 
 	if parsedElements.AnimeTitle != "" {
-		bangumi.Title = strings.Split(parsedElements.AnimeTitle, "/")[0]
+		ret.Title = strings.Split(parsedElements.AnimeTitle, "/")[0]
 	}
 
-	return &ParseItemResult{
-		Bangumi: bangumi,
-		Episode: episode,
-		Season:  seasonNumber,
-	}, nil
+	return &ret, nil
 }
 
-func (parser *MikanRSSParser) parseMikanRSS(mikan *MikanRss) ([]*bangumitypes.Bangumi, error) {
-	bangumiMap := make(map[int64]*bangumitypes.Bangumi)
+func (parser *MikanRSSParser) parseMikanRSS(mikan *MikanRss) ([]*Bangumi, error) {
+	bangumiMap := make(map[int64]*Bangumi)
+	var parseResultList []*ParseItemResult
 	for i, item := range mikan.Channel.Item {
 		if item.Link != "" {
 			parser.logger.Debug().Str("title", item.Title).Msg(fmt.Sprintf("parse Episode %d/%d", i+1, len(mikan.Channel.Item)))
-			err := parser.parserItemLink(item, bangumiMap)
+			parseResult, err := parser.parserItemLink(item)
 			if err != nil {
 				parser.logger.Err(err).Msg("parse item err")
+			} else {
+				parseResultList = append(parseResultList, parseResult)
 			}
 		}
 	}
-	var bangumis []*bangumitypes.Bangumi
-	for _, bangumi := range bangumiMap {
-		bangumis = append(bangumis, bangumi)
+
+	for _, pr := range parseResultList {
+		var foundBgm bool
+		var bgm *Bangumi
+		if bgm, foundBgm = bangumiMap[pr.SubjectId]; !foundBgm {
+			bgm = &Bangumi{
+				Info: BangumiInfo{
+					Title:   pr.Title,
+					TmDBId:  pr.TmDBId,
+					MikanID: pr.MikanBangumiId,
+				},
+				Seasons: make(map[uint]Season),
+			}
+		}
+
+		var foundSeason bool
+		var season Season
+		if season, foundSeason = bgm.Seasons[pr.SeasonNum]; !foundSeason {
+			season = Season{
+				SubjectId:      pr.SubjectId,
+				MikanBangumiId: pr.MikanBangumiId,
+				Number:         pr.SeasonNum,
+				EpCount:        pr.EpCount,
+				Episodes:       make(map[uint]Episode),
+			}
+		}
+
+		var foundEpisode bool
+		var episode Episode
+
+		if episode, foundEpisode = season.Episodes[pr.EpNum]; !foundEpisode {
+			episode = Episode{
+				Number:    pr.EpNum,
+				Resources: make([]TorrentResource, 0),
+			}
+		}
+		episode.Resources = append(episode.Resources, pr.Resource)
+		season.Episodes[pr.EpNum] = episode
+		bgm.Seasons[pr.SeasonNum] = season
+
+		bangumiMap[pr.SubjectId] = bgm
 	}
-	filterBangumi(bangumis)
-	return bangumis, nil
+
+	return maps.Values(bangumiMap), nil
 }
 
-func normalizationResolution(resolution string) string {
+func removeDuplicateSubtitleLang(langs []bangumitypes.SubtitleLang) []bangumitypes.SubtitleLang {
+	allKeys := make(map[bangumitypes.SubtitleLang]bool)
+	var list []bangumitypes.SubtitleLang
+	for _, item := range langs {
+		if _, value := allKeys[item]; !value {
+			allKeys[item] = true
+			list = append(list, item)
+		}
+	}
+	return list
+}
+
+func normalizationResolution(resolution string) bangumitypes.Resolution {
 	switch strings.ToLower(resolution) {
 	case "2160p":
 		return bangumitypes.Resolution2160p
@@ -493,7 +489,7 @@ func normalizationResolution(resolution string) string {
 	}
 }
 
-func normalizationLang(lang string) string {
+func normalizationLang(lang string) bangumitypes.SubtitleLang {
 	for k, v := range bangumitypes.SubTitleLangKeyword {
 		if strings.Contains(lang, k) {
 			return v
@@ -502,12 +498,12 @@ func normalizationLang(lang string) string {
 	return bangumitypes.SubtitleUnknown
 }
 
-func normalizationEpisodeType(epType string) string {
-	epType = strings.ToUpper(epType)
-	switch epType {
-	case bangumitypes.EpisodeTypeSP, bangumitypes.EpisodeTypeOVA, bangumitypes.EpisodeTypeSpecial:
-		return epType
+func normalizationEpisodeType(epType string) bangumitypes.ResourceType {
+	et := bangumitypes.ResourceType(strings.ToUpper(epType))
+	switch et {
+	case bangumitypes.ResourceTypeSP, bangumitypes.ResourceTypeOVA, bangumitypes.ResourceTypeSpecial:
+		return et
 	default:
-		return bangumitypes.EpisodeTypeUnknown
+		return bangumitypes.ResourceTypeUnknown
 	}
 }

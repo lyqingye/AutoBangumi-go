@@ -1,46 +1,54 @@
 package mikan
 
 import (
-	bangumitypes "autobangumi-go/bangumi"
-	"autobangumi-go/mdb"
-	"autobangumi-go/utils"
 	"bytes"
-	"encoding/xml"
 	"fmt"
 	"regexp"
 	"strings"
 
+	"autobangumi-go/mdb"
+	"autobangumi-go/utils"
+	tmdb "github.com/cyruzin/golang-tmdb"
+	"github.com/pkg/errors"
+
 	"github.com/PuerkitoBio/goquery"
 	"github.com/antlabs/strsim"
-	tmdb "github.com/cyruzin/golang-tmdb"
 )
 
-func (parser *MikanRSSParser) Search(keyword string) (*bangumitypes.Bangumi, error) {
-	resp, err := parser.http.R().SetQueryParam("searchstr", keyword).Get(parser.mikanEndpoint.JoinPath("RSS/Search").String())
+func (parser *MikanRSSParser) Search(title string, tmdbID int64) (*Bangumi, error) {
+	var tv *tmdb.TVDetails
+	var err error
+
+	if tmdbID == 0 {
+		tv, err = parser.searchTMDB(title)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		tv, err = parser.getTMDB(tmdbID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	searchResult, err := parser.Search2(title)
 	if err != nil {
-		return nil, err
+		subject, err := parser.searchBangumiTV(title)
+		if err != nil {
+			return nil, err
+		}
+		searchResult, err = parser.Search2(subject.NameCn)
+		if err != nil {
+			return nil, err
+		}
 	}
-	rssContent := MikanRss{}
-	err = xml.Unmarshal(resp.Body(), &rssContent)
-	if err != nil {
-		return nil, err
+	if searchResult.Info.TmDBId == tv.ID {
+		return searchResult, nil
 	}
-	result, err := parser.parseMikanRSS(&rssContent)
-	if err != nil {
-		return nil, err
-	}
-	if len(result) == 0 {
-		return nil, fmt.Errorf("search bangumi empty: %s", keyword)
-	}
-	var names []string
-	for _, bgm := range result {
-		names = append(names, bgm.Info.Title)
-	}
-	matchResult := strsim.FindBestMatch(keyword, names)
-	return result[matchResult.BestIndex], nil
+	return nil, errors.New("mikan complete error, bangumi not found")
 }
 
-func (parser *MikanRSSParser) Search2(keyword string) (*bangumitypes.Bangumi, error) {
+func (parser *MikanRSSParser) Search2(keyword string) (*Bangumi, error) {
 	resp, err := parser.http.R().SetQueryParam("searchstr", keyword).Get(parser.mikanEndpoint.JoinPath("HOME/Search").String())
 	if err != nil {
 		return nil, err
@@ -65,10 +73,14 @@ func (parser *MikanRSSParser) Search2(keyword string) (*bangumitypes.Bangumi, er
 		names = append(names, bgm.Info.Title)
 	}
 	matchResult := strsim.FindBestMatch(keyword, names)
-	return result[matchResult.BestIndex], nil
+	rs := result[matchResult.BestIndex]
+	if rs.GetMikanID() != "" {
+		return parser.Search3(rs.GetMikanID())
+	}
+	return rs, nil
 }
 
-func (parser *MikanRSSParser) Search3(bangumiId string) (*bangumitypes.Bangumi, error) {
+func (parser *MikanRSSParser) Search3(bangumiId string) (*Bangumi, error) {
 	resp, err := parser.http.R().Get(parser.mikanEndpoint.JoinPath(fmt.Sprintf("HOME/Bangumi/%s", bangumiId)).String())
 	if err != nil {
 		return nil, err
@@ -127,46 +139,71 @@ func (parser *MikanRSSParser) parserRSSFromWebPage(doc *goquery.Document) (*Mika
 	return &rssContent, nil
 }
 
-func (parser *MikanRSSParser) searchBangumiTV(keyword string) (*mdb.Subjects, error) {
-	cachedSubject := mdb.Subjects{}
-	key := getBangumiTVCacheKeyByKeyword(keyword)
-	cached, err := parser.db.Get(key, &cachedSubject)
-	if err != nil || !cached {
-		subject, err := parser.bangumiTvClient.SearchAnime2(keyword)
-		if err != nil {
-			return nil, err
-		}
-		return subject, parser.db.Set(key, subject)
-	} else {
-		return &cachedSubject, nil
-	}
-}
-
 func (parser *MikanRSSParser) searchTMDB(keyword string) (*tmdb.TVDetails, error) {
-	cachedTV := tmdb.TVDetails{}
-	key := getTMDBCacheByKeyword(keyword)
-	cached, err := parser.db.Get(key, &cachedTV)
-	if err != nil || !cached {
-		keyword = normalizationSearchTitle(keyword)
-		result, err := parser.tmdb.SearchTVShowByKeyword(keyword)
-		if err != nil {
-			return nil, err
-		}
-		return result, parser.db.Set(key, result)
-	} else {
-		return &cachedTV, nil
+	keyword = normalizationSearchTitle(keyword)
+
+	cache, err := parser.cm.GetTMDBCache(keyword)
+	if err == nil {
+		return &cache, nil
 	}
+	value, err := parser.tmdb.SearchTVShowByKeyword(keyword)
+	if err != nil {
+		return nil, err
+	}
+	_ = parser.cm.StoreTMDBCache(keyword, *value)
+	return value, nil
 }
 
 func (parser *MikanRSSParser) getTMDB(tmdbID int64) (*tmdb.TVDetails, error) {
-	return parser.tmdb.GetTVDetailById(tmdbID)
+	cache, err := parser.cm.GetTMDBCacheByID(tmdbID)
+	if err == nil {
+		return &cache, nil
+	}
+
+	value, err := parser.tmdb.GetTVDetailById(tmdbID)
+	if err != nil {
+		return nil, err
+	}
+
+	_ = parser.cm.StoreTMDBCacheById(tmdbID, *value)
+	return value, nil
+}
+
+func (parser *MikanRSSParser) searchBangumiTV(title string) (*mdb.Subjects, error) {
+	cache, err := parser.cm.GetBangumiTVCache(title)
+	if err == nil {
+		return &cache, nil
+	}
+
+	value, err := parser.bangumiTV.SearchAnime2(title)
+	if err != nil {
+		return nil, err
+	}
+	_ = parser.cm.StoreBangumiTVCache(title, *value)
+
+	return value, nil
+}
+
+func (parser *MikanRSSParser) getBangumiTVSubjects(id int64) (*mdb.Subjects, error) {
+	cache, err := parser.cm.GetBangumiTVSubjectsCache(id)
+	if err == nil {
+		return &cache, nil
+	}
+	value, err := parser.bangumiTV.GetSubjects(id)
+	if err != nil {
+		return nil, err
+	}
+
+	_ = parser.cm.StoreBangumiTVSubjectsCache(id, *value)
+
+	return value, nil
 }
 
 func normalizationSearchTitle(keyword string) string {
 	patterns := []string{
 		"第([[:digit:]]+|\\p{Han}+)季",
 		"第([[:digit:]]+|\\p{Han}+)期",
-		"Season\\s*\\d+",
+		"SeasonNum\\s*\\d+",
 	}
 	for _, pattern := range patterns {
 		re := regexp.MustCompile(pattern)

@@ -316,7 +316,7 @@ func (qb *QbittorrentClient) WatchTorrent(hash string, period time.Duration, cal
 			if callback(torr) {
 				break
 			}
-		} else if err == ErrTorrentNotFound {
+		} else if errors.Is(err, ErrTorrentNotFound) {
 			return err
 		}
 	}
@@ -331,7 +331,7 @@ func (qb *QbittorrentClient) WatchTorrentProperties(hash string, period time.Dur
 			if callback(torr) {
 				break
 			}
-		} else if err == ErrTorrentNotFound {
+		} else if errors.Is(err, ErrTorrentNotFound) {
 			return err
 		}
 	}

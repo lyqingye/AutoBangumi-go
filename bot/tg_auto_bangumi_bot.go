@@ -1,21 +1,26 @@
 package bot
 
 import (
-	"autobangumi-go/bangumi"
-	"autobangumi-go/utils"
-	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"autobangumi-go/bangumi"
+	"autobangumi-go/config"
+	"autobangumi-go/utils"
+	"github.com/pkg/errors"
+
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 const (
-	CmdSearchBangumi = "search_bangumi"
+	CmdSearchBangumi    = "search_bangumi"
+	CmdRestart          = "restart"
+	CmdAddPikpakAccount = "add_pikpak_account"
 
 	CallBackTypeAddNewBangumi = "cb_add_bangumi"
 )
@@ -38,11 +43,6 @@ func parseCallbackData(callbackData string) (callbackType string, cacheKey uint6
 	return arr[0], cacheKey, nil
 }
 
-type TGAutoBangumiBotConfig struct {
-	AutoBangumiConfig
-	TGBotToken string
-}
-
 type TGAutoBangumiBot struct {
 	tg          *TGBot
 	autoBangumi *AutoBangumi
@@ -50,14 +50,17 @@ type TGAutoBangumiBot struct {
 	cacheKey    uint64
 }
 
-func NewTGAutoBangumiBot(config *TGAutoBangumiBotConfig) (*TGAutoBangumiBot, error) {
+func NewTGAutoBangumiBot(config *config.Config) (*TGAutoBangumiBot, error) {
 	bot := TGAutoBangumiBot{}
-	tgBot, err := NewTGBot(config.TGBotToken, &bot)
-	if err != nil {
-		return nil, err
+	if config.TelegramBot.Enable {
+		tgBot, err := NewTGBot(config.TelegramBot.Token, &bot)
+		if err != nil {
+			return nil, err
+		}
+		bot.tg = tgBot
+		go bot.tg.Run()
 	}
-	bot.tg = tgBot
-	autoBangumi, err := NewAutoBangumi(&config.AutoBangumiConfig)
+	autoBangumi, err := NewAutoBangumi(config)
 	if err != nil {
 		return nil, err
 	}
@@ -68,8 +71,7 @@ func NewTGAutoBangumiBot(config *TGAutoBangumiBotConfig) (*TGAutoBangumiBot, err
 }
 
 func (bot *TGAutoBangumiBot) Run() {
-	go bot.autoBangumi.Start()
-	bot.tg.Run()
+	bot.autoBangumi.Start()
 }
 
 func (ab *TGAutoBangumiBot) OnMessage(tgBot *TGBot, msg *tgbotapi.Message) {
@@ -90,6 +92,12 @@ func (ab *TGAutoBangumiBot) onCommand(bot *TGBot, chatId int64, cmd string, args
 	switch cmd {
 	case CmdSearchBangumi:
 		return ab.executeSearchBangumiCmd(bot, chatId, args)
+	case CmdAddPikpakAccount:
+		return ab.executeAddPikpakAccountCmd(bot, chatId, args)
+	case CmdRestart:
+		bot.sendMsg("bot will be restart")
+		os.Exit(0)
+		return nil
 	default:
 		return fmt.Errorf("unknown cmd: %s", cmd)
 	}
@@ -127,6 +135,18 @@ func (ab *TGAutoBangumiBot) executeSearchBangumiCmd(bot *TGBot, chatId int64, ar
 	return err
 }
 
+func (ab *TGAutoBangumiBot) executeAddPikpakAccountCmd(bot *TGBot, chatId int64, args []string) error {
+	if len(args) != 2 {
+		return errors.Errorf("invalid add pikpak account args: %s", strings.Join(args, ","))
+	}
+	err := ab.autoBangumi.AddPikpakAccount(args[0], args[1])
+	if err != nil {
+		return errors.Wrap(err, "add pikpak account error")
+	}
+	bot.sendMsg("添加账号成功")
+	return nil
+}
+
 func (bot *TGAutoBangumiBot) OnCallbackQuery(tgBot *TGBot, cq *tgbotapi.CallbackQuery) {
 	cqType, cacheKey, err := parseCallbackData(cq.Data)
 	if err != nil {
@@ -137,27 +157,35 @@ func (bot *TGAutoBangumiBot) OnCallbackQuery(tgBot *TGBot, cq *tgbotapi.Callback
 	case CallBackTypeAddNewBangumi:
 		if value, found := bot.cache.Get(cacheKey); found {
 			req := value.(AddNewBangumiRequest)
-			bgmMan := bot.autoBangumi.bgmMan
-			if bgmMan.IsBangumiExist(req.Name) {
-				tgBot.sendMsg("已经追番成功，请勿重复追番😅😅😅")
-			} else {
-				bgmMan.AddBangumiIfNotExist(bangumi.Bangumi{
-					Info: bangumi.BangumiInfo{
-						Title:  req.Name,
-						TmDBId: req.TMDBId,
-					},
-				})
-				tgBot.sendMsg("追番成功🤣")
+			newBgm, err := bot.autoBangumi.AddBangumi(req.Name, req.TMDBId)
+			if err != nil {
+				tgBot.sendMsg(fmt.Sprintf("😅😅😅追番失败，错误信息： %s", err.Error()))
+				return
+			}
+			tgBot.sendMsg("追番成功🤣, 正在后台开始下载")
+			seasons, err := newBgm.GetSeasons()
+			if err != nil {
+				return
+			}
+			for _, season := range seasons {
+				episodes, err := season.GetEpisodes()
+				if err != nil {
+					continue
+				}
+				tgBot.sendMsg(fmt.Sprintf("季: %d 总集数: %d 已经找到资源的集数: %d", season.GetNumber(), season.GetEpCount(), len(episodes)))
 			}
 		}
 	}
 	bot.cache.Delete(cacheKey)
 }
 
-func (bot *TGAutoBangumiBot) OnComplete(info *bangumi.BangumiInfo, seasonNum uint, episode bangumi.Episode) {
-	bot.tg.sendMsg(fmt.Sprintf("[%s] S%01dE%02d finished", info.Title, seasonNum, episode.Number))
+func (bot *TGAutoBangumiBot) OnComplete(bgm bangumi.Bangumi, seasonNum uint, epNum uint) {
+	bot.tg.sendMsg(fmt.Sprintf("✅ %s S%d E%d", bgm.GetTitle(), seasonNum, epNum))
 }
 
-func (bot *TGAutoBangumiBot) OnErr(err error, info *bangumi.BangumiInfo, seasonNum uint, episode bangumi.Episode) {
-
+func (bot *TGAutoBangumiBot) OnErr(err error, bgm bangumi.Bangumi, seasonNum uint, epNum uint) {
+	if err == nil {
+		return
+	}
+	bot.tg.sendMsg(fmt.Sprintf("❌ %s S%d E%d err: %s", bgm.GetTitle(), seasonNum, epNum, err.Error()))
 }

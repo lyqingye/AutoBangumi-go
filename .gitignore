@@ -2,7 +2,10 @@
 .idea/.*
 docker.env
 ./.vscode/*
-cache
 bangumi_cache
 build
 pikpak.json
+./deployment/downloads
+./deployment/qb
+./deployment/aria2
+./deployment/db_data

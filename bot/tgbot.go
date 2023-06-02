@@ -51,9 +51,9 @@ func (t *TGBot) Run() {
 	}
 }
 
-func (t *TGBot) sendMsg(msg string) (tgbotapi.Message, error) {
+func (t *TGBot) sendMsg(msg string) {
 	out := tgbotapi.NewMessage(t.chatId, msg)
-	return t.bot.Send(out)
+	_, _ = t.bot.Send(out)
 }
 
 func (t *TGBot) sendMsgNoResult(msg string) {

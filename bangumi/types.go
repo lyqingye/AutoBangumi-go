@@ -1,175 +1,148 @@
 package bangumi
 
 import (
-	"errors"
+	"sort"
 	"time"
 )
 
+// Resolution 分辨率
+type Resolution string
+
 const (
-	Resolution2160p   = "2160p"
-	Resolution1080p   = "1080P"
-	Resolution720p    = "720P"
-	ResolutionUnknown = "unknown"
+	Resolution2160p   Resolution = "2160p"
+	Resolution1080p   Resolution = "1080P"
+	Resolution720p    Resolution = "720P"
+	ResolutionUnknown Resolution = "unknown"
+)
 
-	SubtitleChs     = "CHS"
-	SubtitleCht     = "CHT"
-	SubtitleUnknown = "unknown"
+// SubtitleLang 字幕语言
+type SubtitleLang string
 
-	EpisodeTypeSP         = "SP"
-	EpisodeTypeOVA        = "OVA"
-	EpisodeTypeSpecial    = "Special"
-	EpisodeTypeNone       = "None"
-	EpisodeTypeCollection = "Collection"
-	EpisodeTypeUnknown    = "unknown"
+const (
+	SubtitleChs     SubtitleLang = "CHS"
+	SubtitleCht     SubtitleLang = "CHT"
+	SubtitleUnknown SubtitleLang = "unknown"
+)
 
-	NoDownloader = "None"
+// SeasonType 动漫季度类型
+type SeasonType string
+
+const (
+	SeasonTypeSpecial SeasonType = "Special"
+	SeasonTypeOVA     SeasonType = "OVA"
+	SeasonTypeTV      SeasonType = "TV"
+	SeasonTypeNone    SeasonType = "None"
+)
+
+// ResourceType 动漫每一集的类型
+type ResourceType string
+
+const (
+	ResourceTypeSP         ResourceType = "SP"
+	ResourceTypeOVA        ResourceType = "OVA"
+	ResourceTypeSpecial    ResourceType = "Special"
+	ResourceTypeNone       ResourceType = "None"
+	ResourceTypeCollection ResourceType = "Collection"
+	ResourceTypeUnknown    ResourceType = "unknown"
+)
+
+type DownloadState string
+
+const (
+	TryDownload DownloadState = "try download"
+	Downloading DownloadState = "downloading"
+	Downloaded  DownloadState = "downloaded"
+	DownloadErr DownloadState = "download err"
+)
+
+type Downloader string
+
+const (
+	QBDownloader     Downloader = "qb"
+	PikpakDownloader Downloader = "pikpak + aria2"
 )
 
 var (
-	ResolutionPriority = map[string]int{
+	ResolutionPriority = map[Resolution]int{
 		Resolution2160p:   4,
 		Resolution1080p:   3,
 		Resolution720p:    2,
 		ResolutionUnknown: 1,
 	}
 
-	SubtitlePriority = map[string]int{
+	SubtitlePriority = map[SubtitleLang]int{
 		SubtitleChs:     3,
 		SubtitleCht:     2,
 		SubtitleUnknown: 1,
 	}
 )
 
-type Bangumi struct {
-	Info    BangumiInfo     `json:"info"`
-	Seasons map[uint]Season `json:"seasons"`
-}
-
-func (bangumi *Bangumi) IsComplete() bool {
-	if len(bangumi.Seasons) == 0 {
-		return false
+func SelectBestResource(resources []Resource) Resource {
+	if len(resources) == 0 {
+		return nil
+	}
+	if len(resources) == 1 {
+		return resources[0]
 	}
 
-	result := true
-	for _, season := range bangumi.Seasons {
-		if len(season.Complete) != int(season.EpCount) {
-			result = false
-			break
-		}
-	}
-	return result
+	// priority: resolution | subtitle
+	sort.Slice(resources, func(i, j int) bool {
+		return ResolutionPriority[resources[i].GetResolution()] > ResolutionPriority[resources[j].GetResolution()] ||
+			SubtitlePriority[getResourceBestLang(resources[i])] > SubtitlePriority[getResourceBestLang(resources[j])]
+	})
+
+	return resources[0]
 }
 
-type Season struct {
-	SubjectId      int64     `json:"subjectId"`
-	MikanBangumiId string    `json:"mikanBangumiId"`
-	Number         uint      `json:"number"`
-	EpCount        uint      `json:"epcount"`
-	Episodes       []Episode `json:"episodes"`
-	Complete       []uint    `json:"complete"`
+func getResourceBestLang(resource Resource) SubtitleLang {
+	langs := resource.GetSubtitleLang()
+	sort.Slice(langs, func(i, j int) bool {
+		return SubtitlePriority[langs[i]] > SubtitlePriority[langs[j]]
+	})
+	return langs[0]
 }
 
-func (season *Season) ListIncompleteEpisodes() []Episode {
-	var result []Episode
-	for _, ep := range season.Episodes {
-		if !season.IsComplete(ep.Number) {
-			result = append(result, ep)
-		}
-	}
-	return result
+type Episode interface {
+	GetNumber() uint
+	GetResources() ([]Resource, error)
+	GetRefSeason() (Season, error)
+	IsDownloaded() bool
 }
 
-func (season *Season) IsComplete(epNum uint) bool {
-	for _, number := range season.Complete {
-		if epNum == number {
-			return true
-		}
-	}
-	return false
+type Resource interface {
+	GetRefEpisode() (Episode, error)
+	GetTorrent() []byte
+	GetTorrentHash() string
+	GetSubtitleLang() []SubtitleLang
+	GetResolution() Resolution
+	GetResourceType() ResourceType
 }
 
-func (season *Season) RemoveComplete(epNum uint) {
-	var newArray []uint
-	for _, number := range season.Complete {
-		if epNum != number {
-			newArray = append(newArray, number)
-		}
-	}
-	season.Complete = newArray
+type Season interface {
+	GetNumber() uint
+	GetEpCount() uint
+	GetEpisodes() ([]Episode, error)
+	GetRefBangumi() (Bangumi, error)
+	IsDownloaded() bool
 }
 
-func (season *Season) IsEpisodesCollected() bool {
-	return int(season.EpCount) == len(season.Episodes)
+type Bangumi interface {
+	GetTitle() string
+	GetTmDBId() int64
+	GetSeasons() ([]Season, error)
+	IsDownloaded() bool
 }
 
-type BangumiInfo struct {
-	Title  string `json:"title"`
-	TmDBId int64  `json:"tmdbId"`
-}
-
-type Episode struct {
-	Number         uint      `json:"number"`
-	RawFilename    string    `json:"rawFilename"`
-	Subgroup       string    `json:"subgroup"`
-	Magnet         string    `json:"magnet"`
-	TorrentHash    string    `json:"torrentHash"`
-	Torrent        []byte    `json:"torrent"`
-	TorrentPubDate time.Time `json:"torrentPubDate"`
-	FileSize       uint64    `json:"fileSize"`
-	SubtitleLang   []string  `json:"subtitleLang"`
-	Resolution     string    `json:"resolution"`
-	Type           string    `json:"episodeType"`
-
-	// modify my downloader
-	DownloadState DownloadState `json:"downloadState"`
-}
-
-func (e *Episode) IsNeedToDownload() bool {
-	return e.DownloadState.Downloader == ""
-}
-
-func (e *Episode) IsCHSubtitle() bool {
-	for _, sub := range e.SubtitleLang {
-		switch sub {
-		case SubtitleCht, SubtitleChs:
-			return true
-		}
-	}
-	return false
-}
-
-type DownloadState struct {
-	Downloader string `json:"downloader"`
-	TaskId     string `json:"taskId"`
-}
-
-func (e *Episode) Compare(o *Episode) bool {
-	langI := e.SubtitleLang[0]
-	langJ := o.SubtitleLang[0]
-	return ResolutionPriority[e.Resolution] > ResolutionPriority[o.Resolution] ||
-		SubtitlePriority[langI] > SubtitlePriority[langJ] ||
-		e.TorrentPubDate.After(o.TorrentPubDate)
-}
-
-func (e *Episode) CanReplace(replacement *Episode) bool {
-	if !e.IsCHSubtitle() && replacement.IsCHSubtitle() {
-		return true
-	}
-	if ResolutionPriority[replacement.Resolution] > ResolutionPriority[e.Resolution] {
-		return true
-	}
-	return false
-}
-
-func (e *Episode) Validate() error {
-	if e.Number <= 0 {
-		return errors.New("invalid ep number")
-	}
-	if e.Magnet == "" && len(e.Torrent) == 0 {
-		return errors.New("empty download resource")
-	}
-	if e.FileSize == 0 {
-		return errors.New("invalid filesize")
-	}
-	return nil
+type DownLoadHistory interface {
+	GetState() DownloadState
+	GetDownloader() Downloader
+	GetDownloaderContext() string
+	GetErrMsg() string
+	GetTorrent() []byte
+	GetTorrentHash() string
+	GetRetryCount() int64
+	IncRetryCount()
+	SetDownloader(downloader Downloader, context string, downloadState DownloadState, error error)
+	SetDownloadState(downloadState DownloadState, error error)
+	LastUpdatedTime() time.Time
 }
