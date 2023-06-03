@@ -114,7 +114,7 @@ func TestMikanCompleteBangumi(t *testing.T) {
 	require.NoError(t, err)
 	bangumi := bangumitypes.Bangumi{
 		Info: bangumitypes.BangumiInfo{
-			Title: "乙女游戏世界对路人角色很不友好",
+			Title: "女神的露天咖啡厅",
 		},
 	}
 	err = parser.CompleteBangumi(&bangumi)

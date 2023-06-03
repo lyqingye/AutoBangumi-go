@@ -366,6 +366,9 @@ func (pool *Pool) recycleAccStorage(client *pikpakgo.PikPakClient) error {
 	}
 	var ids []string
 	for _, fi := range files {
+		if fi.FolderType == pikpakgo.FolderTypeDownload {
+			continue
+		}
 		ids = append(ids, fi.ID)
 	}
 	return client.BatchDeleteFiles(ids)

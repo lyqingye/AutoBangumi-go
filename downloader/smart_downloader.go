@@ -273,6 +273,17 @@ func (dl *SmartDownloader) downloadUsingQbittorrent(info *bangumi.BangumiInfo, s
 				return
 			}
 
+			content, err := dl.qb.GetTorrentContent(hash, []int64{})
+			if err != nil {
+				return
+			}
+
+			if len(content) == 0 {
+				l.Warn().Msg("the torrent not available content to download, skip them")
+				_ = dl.qb.DeleteTorrents([]string{hash}, true)
+				return
+			}
+
 			// resume
 			err = dl.qb.ResumeTorrents([]string{hash})
 			if err != nil {
