@@ -1,8 +1,8 @@
 package db
 
 import (
-	"encoding/json"
-	"gorm.io/driver/sqlite"
+	"gorm.io/driver/postgres"
+	//"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	"log"
@@ -15,8 +15,8 @@ type Backend struct {
 	mtx   sync.RWMutex
 }
 
-func NewBackend(dbPath string) (*Backend, error) {
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+func NewBackend(dsn string) (*Backend, error) {
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: logger.New(log.New(os.Stdout, "\r\n", 0), logger.Config{LogLevel: logger.Info}),
 	})
 	if err != nil {
@@ -29,7 +29,7 @@ func NewBackend(dbPath string) (*Backend, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = db.AutoMigrate(&MBangumi{}, &MSeason{}, &MEpisode{})
+	err = db.AutoMigrate(&MBangumi{}, &MSeason{}, &MEpisode{}, &MEpisodeTorrent{}, &MTorrent{})
 	return &backend, err
 }
 
@@ -59,7 +59,7 @@ func (b *Backend) ListIncompleteBangumi(fn func(bgm *MBangumi) bool) error {
 	defer b.mtx.Unlock()
 	var bangumis []MBangumi
 	result := b.inner.Joins("JOIN m_seasons ON m_bangumis.id = m_seasons.bangumi_id").
-		Where("m_seasons.state = ?", SeasonStateComplete).
+		Where("m_seasons.state = ?", SeasonStateIncomplete).
 		Find(&bangumis)
 	if result.Error != nil {
 		return result.Error
@@ -70,13 +70,4 @@ func (b *Backend) ListIncompleteBangumi(fn func(bgm *MBangumi) bool) error {
 		}
 	}
 	return nil
-}
-
-func (b *Backend) GetEpisodeTorrent(ep *MEpisode) (*MTorrent, error) {
-	var torrentData EpisodeTorrent
-	err := json.Unmarshal([]byte(ep.Torrents), &torrentData)
-	if err != nil {
-		return nil, err
-	}
-	return nil, nil
 }

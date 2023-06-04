@@ -15,8 +15,8 @@ type MTorrent struct {
 }
 
 type MBangumi struct {
-	ID         uint `gorm:"primaryKey"`
-	Title      string
+	ID         uint   `gorm:"primaryKey"`
+	Title      string `gorm:"uniqueIndex"`
 	AliasNames string // split by ,
 	TMDBId     string
 
@@ -30,8 +30,8 @@ const (
 
 type MSeason struct {
 	ID         uint `gorm:"primaryKey"`
-	BangumiId  uint `gorm:"primaryKey;autoIncrement:false"`
-	Number     uint `gorm:"primaryKey;autoIncrement:false"`
+	BangumiId  uint `gorm:"uniqueIndex:bangumi_number_idx"`
+	Number     uint `gorm:"uniqueIndex:bangumi_number_idx"`
 	EpCount    uint
 	SubjectId  int64
 	MikanId    string
@@ -41,20 +41,22 @@ type MSeason struct {
 	Episodes []MEpisode `gorm:"foreignKey:SeasonId"`
 }
 
-type EpisodeTorrent struct {
-	TorrentId    uint   // MTorrent Id
+type MEpisodeTorrent struct {
+	ID          uint   `gorm:"primaryKey"`
+	EpisodeId   uint   `gorm:"uniqueIndex:episode_hash_files_idx"`
+	TorrentHash string `gorm:"uniqueIndex:episode_hash_files_idx"`
+	FileIndexes string `gorm:"uniqueIndex:episode_hash_files_idx"`
+
 	SubtitleLang string // split by ,
 	Resolution   string
-	FileIndexes  []int64 // file indexes of torrent files
 }
 
 type MEpisode struct {
-	ID        uint `gorm:"primaryKey"`
-	BangumiId uint `gorm:"primaryKey;autoIncrement:false"`
-	SeasonId  uint `gorm:"primaryKey;autoIncrement:false"`
-	Number    uint
-	Type      string // ref bangumi.EpisodeTypeSpecial etc...
-	Torrents  string // a json string of struct [] EpisodeTorrent
+	ID       uint              `gorm:"primaryKey"`
+	SeasonId uint              `gorm:"uniqueIndex:bangumi_season_idx"`
+	Number   uint              `gorm:"uniqueIndex:bangumi_season_idx"`
+	Type     string            // ref bangumi.EpisodeTypeSpecial etc...
+	Torrents []MEpisodeTorrent `gorm:"foreignKey:EpisodeId"` // a json string of struct [] EpisodeTorrent
 }
 
 const (
@@ -72,9 +74,9 @@ const (
 type DownloadHistory struct {
 	gorm.Model
 
-	BangumiId uint `gorm:"index:episode_index"`
-	SeasonId  uint `gorm:"index:episode_index"`
-	EpisodeId uint `gorm:"index:episode_index"`
+	BangumiId uint `gorm:"uniqueIndex:bangumi_season_episode_idx"`
+	SeasonId  uint `gorm:"uniqueIndex:bangumi_season_episode_idx"`
+	EpisodeId uint `gorm:"uniqueIndex:bangumi_season_episode_idx"`
 
 	Downloader   string
 	ResourceType string // ref ResourceTypeTorrent | ResourceTypeHttpLink | ResourceTypeMagnet

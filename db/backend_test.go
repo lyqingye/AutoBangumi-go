@@ -12,7 +12,9 @@ type TestBackendSuite struct {
 }
 
 func (suite *TestBackendSuite) SetupTest() {
-	backend, err := db.NewBackend(":memory:")
+	dsn := "host=nas.lyqingye.com user=postgres password=123456 dbname=test port=5678 sslmode=disable TimeZone=Asia/Shanghai"
+
+	backend, err := db.NewBackend(dsn)
 	suite.NoError(err)
 	suite.NotNil(backend)
 	suite.backend = backend
@@ -36,6 +38,22 @@ func (suite *TestBackendSuite) TestCRUD() {
 				MikanId:    "mikan001",
 				SeasonType: "Type 1",
 				State:      db.SeasonStateIncomplete,
+				Episodes: []db.MEpisode{
+					{
+						ID:       0,
+						SeasonId: 0,
+						Number:   0,
+						Type:     "",
+						Torrents: []db.MEpisodeTorrent{
+							db.MEpisodeTorrent{
+								TorrentHash:  "fadfadf",
+								FileIndexes:  "fafaf",
+								SubtitleLang: "afafaf",
+								Resolution:   "",
+							},
+						},
+					},
+				},
 			},
 			{
 				Number:     2,
