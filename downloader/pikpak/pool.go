@@ -44,6 +44,7 @@ type Pool struct {
 	clients            map[string]*pikpakgo.PikPakClient
 	fileUrlToFile      map[string]*File
 	configPath         string
+	tempDirectory      string
 }
 
 func NewPool(configPath string) (*Pool, error) {
@@ -55,6 +56,7 @@ func NewPool(configPath string) (*Pool, error) {
 		clients:            map[string]*pikpakgo.PikPakClient{},
 		fileUrlToFile:      map[string]*File{},
 		configPath:         configPath,
+		tempDirectory:      "/temp",
 	}
 	err := pool.loadAccountsFromConfigFile()
 	if err != nil {
@@ -130,7 +132,11 @@ Retry:
 	if task == nil {
 		// offline download and wait
 		pool.logger.Debug().Str("name", name).Msg("add offline task")
-		newTask, err := client.OfflineDownload(name, magnet, "")
+		pid, err := client.FolderPathToID(pool.tempDirectory, true)
+		if err != nil {
+			goto Retry
+		}
+		newTask, err := client.OfflineDownload(name, magnet, pid)
 		if err != nil {
 			if errors.Is(err, pikpakgo.ErrDailyCreateLimit) {
 				pool.logger.Warn().Str("username", acc.Username).Str("reason", err.Error()).Msg("restrict account")
@@ -356,11 +362,15 @@ func (pool *Pool) recycleAllAccStorage() {
 }
 
 func (pool *Pool) recycleAccStorage(client *pikpakgo.PikPakClient) error {
-	err := client.OfflineRemoveAll([]string{pikpakgo.PhaseTypeError, pikpakgo.PhaseTypePending, pikpakgo.PhaseTypeRunning}, true)
+	err := client.OfflineRemoveAll([]string{pikpakgo.PhaseTypeError}, true)
 	if err != nil {
 		return err
 	}
-	files, err := client.FileListAll("")
+	fileId, err := client.FolderPathToID(pool.tempDirectory, true)
+	if err != nil {
+		return err
+	}
+	files, err := client.FileListAll(fileId)
 	if err != nil {
 		return err
 	}

@@ -22,4 +22,4 @@ WORKDIR /
 
 COPY --from=build-stage /app/ab /ab
 
-ENTRYPOINT ["/ab"]
+ENTRYPOINT ["/ab", "bot", "run-ab-bot"]

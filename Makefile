@@ -1,4 +1,4 @@
-IMAGE_NAME := lyqingye/autobangumi-go
+IMAGE_NAME := ghcr.io/lyqingye/autobangumi-go
 TAG := latest
 BINARY_NAME := autobangumi-go
 OUTPUT_DIR := ./build/bin
