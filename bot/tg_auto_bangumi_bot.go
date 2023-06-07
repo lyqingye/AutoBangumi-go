@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -16,6 +17,7 @@ import (
 
 const (
 	CmdSearchBangumi = "search_bangumi"
+	CmdRestart       = "restart"
 
 	CallBackTypeAddNewBangumi = "cb_add_bangumi"
 )
@@ -90,6 +92,10 @@ func (ab *TGAutoBangumiBot) onCommand(bot *TGBot, chatId int64, cmd string, args
 	switch cmd {
 	case CmdSearchBangumi:
 		return ab.executeSearchBangumiCmd(bot, chatId, args)
+	case CmdRestart:
+		bot.sendMsg("bot will be restart")
+		os.Exit(0)
+		return nil
 	default:
 		return fmt.Errorf("unknown cmd: %s", cmd)
 	}
