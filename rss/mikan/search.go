@@ -15,6 +15,7 @@ import (
 	tmdb "github.com/cyruzin/golang-tmdb"
 )
 
+// Deprecated: Using Search2 instead
 func (parser *MikanRSSParser) Search(keyword string) (*bangumitypes.Bangumi, error) {
 	resp, err := parser.http.R().SetQueryParam("searchstr", keyword).Get(parser.mikanEndpoint.JoinPath("RSS/Search").String())
 	if err != nil {
