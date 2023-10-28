@@ -44,8 +44,22 @@ func (client *TMDBClient) SearchTVShowByKeyword(keyword string) (*tmdb.TVDetails
 			tvDetails, err := client.inner.GetTVDetails(int(searchResult.Results[0].ID), opts)
 			if err == nil {
 				return tvDetails, nil
+			} else {
+				return nil, err
 			}
 		}
 	}
 	return nil, fmt.Errorf("tmdb not found: %s", keyword)
+}
+
+func (client *TMDBClient) GetTVDetailById(tmdbId int64) (*tmdb.TVDetails, error) {
+	for _, opts := range []map[string]string{TMDBZHLangOptions, TMDBJPLangOptions, TMDBENLangOptions} {
+		tvDetails, err := client.inner.GetTVDetails(int(tmdbId), opts)
+		if err == nil {
+			return tvDetails, nil
+		} else {
+			return nil, err
+		}
+	}
+	return nil, fmt.Errorf("tmdb not found: %d", tmdbId)
 }

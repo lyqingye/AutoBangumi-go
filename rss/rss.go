@@ -1,21 +1,16 @@
 package rss
 
 import (
-	bangumitypes "pikpak-bot/bangumi"
-	"pikpak-bot/bus"
-	"pikpak-bot/db"
-	"pikpak-bot/mdb"
-	"pikpak-bot/rss/mikan"
-	"pikpak-bot/utils"
 	"sync"
 	"time"
 
-	"github.com/rs/zerolog"
-)
+	bangumitypes "autobangumi-go/bangumi"
+	"autobangumi-go/bus"
+	"autobangumi-go/db"
+	"autobangumi-go/mdb"
+	"autobangumi-go/utils"
 
-var (
-	KeyRSSLink          = []byte("rss-links")
-	KeyRSSSubscribeInfo = []byte("rss-subscribe")
+	"github.com/rs/zerolog"
 )
 
 type SubscribeInfo struct {
@@ -28,7 +23,7 @@ type SubscribeInfo struct {
 // Indexes:
 // - RssLink -> BangumiInfo
 // - SubjectId -> BangumiInfo
-// - (SubjectId,Season,Episode) -> Episode
+// - (SubjectId,SeasonNum,Episode) -> Episode
 
 type RSSManager struct {
 	eb              *bus.EventBus
@@ -38,10 +33,10 @@ type RSSManager struct {
 	refreshLock     sync.Mutex
 	tmdb            *mdb.TMDBClient
 	bangumiTvClient *mdb.BangumiTVClient
-	bgmMan          *bangumitypes.BangumiManager
+	bgmMan          *bangumitypes.Manager
 }
 
-func NewRSSManager(bgmMan *bangumitypes.BangumiManager, eb *bus.EventBus, db *db.DB, period time.Duration, tmdbClient *mdb.TMDBClient, bangumiTVClient *mdb.BangumiTVClient) (*RSSManager, error) {
+func NewRSSManager(bgmMan *bangumitypes.Manager, eb *bus.EventBus, db *db.DB, period time.Duration, tmdbClient *mdb.TMDBClient, bangumiTVClient *mdb.BangumiTVClient) (*RSSManager, error) {
 	man := RSSManager{
 		eb:              eb,
 		db:              db,
@@ -53,42 +48,4 @@ func NewRSSManager(bgmMan *bangumitypes.BangumiManager, eb *bus.EventBus, db *db
 	}
 	man.ticker = time.NewTicker(period)
 	return &man, nil
-}
-
-func (man *RSSManager) Start() {
-	man.logger.Info().Msg("start rss manager")
-	man.Refresh()
-	for range man.ticker.C {
-		man.Refresh()
-	}
-}
-
-func (man *RSSManager) Refresh() {
-	err := man.refreshInComplete()
-	if err != nil {
-		man.logger.Error().Err(err).Msg("refresh incomplete err")
-	}
-}
-
-func (man *RSSManager) refreshInComplete() error {
-	parser, err := mikan.NewMikanRSSParser("https://mikanani.me", man.eb, man.db, man.tmdb, man.bangumiTvClient)
-	if err != nil {
-		return err
-	}
-	eb := man.eb
-	logger := man.logger
-	man.bgmMan.IterInCompleteBangumi(func(man *bangumitypes.BangumiManager, bangumi *bangumitypes.Bangumi) bool {
-		err = parser.CompleteBangumi(bangumi)
-		if err == nil {
-			_ = man.Flush(bangumi)
-			eb.Publish(bus.RSSTopic, bus.Event{
-				EventType: bus.RSSUpdateEventType,
-				Inner:     bangumi,
-			})
-		} else {
-			logger.Error().Err(err).Str("title", bangumi.Info.Title).Msg("complete bangumi error")
-		}
-		return false
-	})
-	return nil
 }

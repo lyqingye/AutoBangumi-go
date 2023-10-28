@@ -2,9 +2,10 @@ package bus
 
 // Topics
 const (
-	RSSTopic   = "topic-tss"
-	Aria2Topic = "topic-aria2"
-	QBTopic    = "topic-qb"
+	RSSTopic        = "topic-tss"
+	Aria2Topic      = "topic-aria2"
+	QBTopic         = "topic-qb"
+	BangumiManTopic = "topic-bangumi-man"
 )
 
 // RSS Event types
@@ -14,9 +15,6 @@ const (
 	RSSUnSubscribeEventType = "event-rss-unsubscribe"
 	RSSParseErrEventType    = "event-rss-parse-err"
 )
-
-type RSSUpdateEvent struct {
-}
 
 // Aria2 Event types
 const (
@@ -28,4 +26,9 @@ const (
 const (
 	QBAddTorrentEventType       = "event-qb-add-torrent"
 	QBDownloadCompleteEventType = "event-qb-download-complete"
+)
+
+// Bangumi Manager Event types
+const (
+	BangumiManAddNewEvent   = "event-bangumi-man-add-new"
 )

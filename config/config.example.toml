@@ -1,0 +1,44 @@
+[DB]
+Host = "nas.lyqingye.com"
+Port = "9004"
+User = "postgres"
+Password = "123456"
+Name = "test"
+MaxConns = 20
+LogLevel = "info"
+
+[QB]
+Enable = false
+Endpoint = "http://nas.lyqingye.com:8888"
+Username = "admin"
+Password = "adminadmin"
+DownloadDir = "/downloads"
+
+[Aria2]
+WsUrl = "ws://nas.lyqingye.com:9000/jsonrpc"
+Secret = "123456"
+DownloadDir = "/downloads"
+
+[Pikpak]
+OfflineDownloadTimeout = "2m"
+
+[AutoBangumi]
+BangumiCompleteInterval = "60m"
+RssRefreshInterval = "5m"
+
+[TMDB]
+Token = "702225c8ca516a5be2f062988438bfda"
+
+[Cache]
+CacheDir = "db_cache"
+ClearCacheInterval = "24h"
+
+[BangumiTV]
+Endpoint = "https://api.bgm.tv/v0"
+
+[Mikan]
+Endpoint = "https://mikanani.me"
+
+[TelegramBot]
+Enable = false
+Token = ""

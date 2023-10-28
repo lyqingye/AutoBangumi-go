@@ -282,5 +282,8 @@ func (ani *AniDBClient) downloadDumpData() ([]byte, error) {
 	}
 	bz := resp.Body()
 	reader, err := gzip.NewReader(bytes.NewBuffer(bz))
+	if err != nil {
+		return nil, err
+	}
 	return io.ReadAll(reader)
 }

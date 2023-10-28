@@ -2,15 +2,17 @@ package utils
 
 import "time"
 
-func ParseDate(str string) (time.Time, error) {
-	return time.Parse("2006-01-02", str)
-}
-
 func SmartParseDate(str string) (time.Time, error) {
 	layouts := []string{
 		"2006-01-02T15:04:05.000",
 		"2006-01-02T15:04:05",
 		"2006-01-02",
+		"2006/01/02T15:04:05.000",
+		"2006/01/02T15:04:05",
+		"2006/01/02",
+		"2006/01/02 15:04",
+		"2006/01/02 15:04:05",
+		"2006/01/02 15:04:05.000",
 	}
 
 	var t time.Time
@@ -41,4 +43,13 @@ func FindCloseTime(times []time.Time, target time.Time) int {
 	}
 
 	return closestIndex
+}
+
+func GetMidnightTime() time.Time {
+	now := time.Now()
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+}
+
+func TimeToMidnightTime(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }

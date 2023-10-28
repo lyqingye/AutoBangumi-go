@@ -1,4 +1,4 @@
-package qibittorrent
+package qbittorrent
 
 import (
 	"bytes"
@@ -128,6 +128,7 @@ func (qb *QbittorrentClient) ListAllTorrent(filter string) ([]Torrent, error) {
 		if len(list) < limit {
 			break
 		}
+		offset = offset + len(list)
 	}
 	return torrentList, nil
 }
@@ -260,9 +261,6 @@ func (qb *QbittorrentClient) GetTorrentContent(hash string, indexes []int64) ([]
 	params := map[string]string{
 		"hash": hash,
 	}
-	if len(indexArray) != 0 {
-		params["indexes"] = strings.Join(indexArray, "|")
-	}
 	var contents []TorrentContent
 	resp, err := qb.client.R().SetQueryParams(params).SetResult(&contents).Get(qb.endpoint.JoinPath("/api/v2/torrents/files").String())
 	if err != nil {
@@ -274,18 +272,70 @@ func (qb *QbittorrentClient) GetTorrentContent(hash string, indexes []int64) ([]
 	return contents, nil
 }
 
-func (qb *QbittorrentClient) WaitForDownloadComplete(hash string, period time.Duration, callback func() bool) {
+func (qb *QbittorrentClient) SetFilePriority(hash string, indexes []int, priority int64) error {
+	params := map[string]string{
+		"hash":     hash,
+		"priority": strconv.FormatInt(priority, 10),
+	}
+	var indexArray []string
+	for _, idx := range indexes {
+		indexArray = append(indexArray, strconv.FormatInt(int64(idx), 10))
+	}
+	if len(indexArray) != 0 {
+		params["id"] = strings.Join(indexArray, "|")
+	}
+	resp, err := qb.client.R().SetFormData(params).Post(qb.endpoint.JoinPath("/api/v2/torrents/filePrio").String())
+	if err != nil {
+		return err
+	}
+	switch resp.StatusCode() {
+	case http.StatusBadRequest:
+		return errors.New("invalid priority")
+	case http.StatusNotFound:
+		return ErrTorrentNotFound
+	case http.StatusConflict:
+		return errors.New("torrent metadata hasn't downloaded yet")
+	}
+	return nil
+}
+
+func (qb *QbittorrentClient) WaitForDownloadComplete(hash string, period time.Duration, callback func() bool) error {
+	return qb.WatchTorrent(hash, period, func(torr *Torrent) bool {
+		if torr.CompletionOn != 0 {
+			return callback()
+		}
+		return false
+	})
+}
+
+func (qb *QbittorrentClient) WatchTorrent(hash string, period time.Duration, callback func(torr *Torrent) bool) error {
 	ticker := time.NewTicker(period)
 	for range ticker.C {
 		torr, err := qb.GetTorrent(hash)
 		if err == nil {
-			if torr.CompletionOn != 0 {
-				if callback() {
-					break
-				}
+			if callback(torr) {
+				break
 			}
+		} else if errors.Is(err, ErrTorrentNotFound) {
+			return err
 		}
 	}
+	return nil
+}
+
+func (qb *QbittorrentClient) WatchTorrentProperties(hash string, period time.Duration, callback func(torr *TorrentProperties) bool) error {
+	ticker := time.NewTicker(period)
+	for range ticker.C {
+		torr, err := qb.GetTorrentProperties(hash)
+		if err == nil {
+			if callback(torr) {
+				break
+			}
+		} else if errors.Is(err, ErrTorrentNotFound) {
+			return err
+		}
+	}
+	return nil
 }
 
 func respToErr(resp []byte) error {

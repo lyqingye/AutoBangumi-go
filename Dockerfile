@@ -1,5 +1,5 @@
 # Build the application from source
-FROM golang:1.20-alpine3.16 AS build-stage
+FROM golang:1.21.3-alpine3.17 AS build-stage
 
 WORKDIR /app
 
@@ -16,10 +16,10 @@ RUN go build -o ab
 
 
 # Deploy the application binary into a lean image
-FROM alpine:3.16
+FROM alpine:3.17
 
 WORKDIR /
 
 COPY --from=build-stage /app/ab /ab
 
-ENTRYPOINT ["/ab"]
+ENTRYPOINT ["/ab", "bot", "run-ab-bot"]

@@ -1,7 +1,7 @@
 package bus_test
 
 import (
-	"pikpak-bot/bus"
+	"autobangumi-go/bus"
 	"testing"
 	"time"
 )
@@ -12,21 +12,25 @@ func TestEventBus(t *testing.T) {
 	topic := "topic"
 	eventType := "type"
 
-	msgNum := 1000000
+	msgNum := 100
 
 	var recvValues []int
 	eb.SubscribeWithFn(topic, func(event bus.Event) {
 		switch event.EventType {
 		case eventType:
+			time.Sleep(time.Second)
 			recvValues = append(recvValues, event.Inner.(int))
 		}
 	})
 	go func() {
 		for i := 0; i < msgNum; i++ {
-			eb.Publish(topic, bus.Event{
-				EventType: eventType,
-				Inner:     i,
-			})
+			go func() {
+				time.Sleep(time.Second)
+				eb.Publish(topic, bus.Event{
+					EventType: eventType,
+					Inner:     i,
+				})
+			}()
 		}
 	}()
 

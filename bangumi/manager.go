@@ -1,108 +1,134 @@
 package bangumi
 
 import (
-	"encoding/json"
-	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
-	"pikpak-bot/utils"
-	"strings"
-	"sync"
+	"context"
 
-	"github.com/rs/zerolog"
+	"github.com/pkg/errors"
 )
 
-type BangumiManager struct {
-	home       string
-	inComplete map[string]Bangumi
-	complete   map[string]Bangumi
-	rwLock     sync.RWMutex
-	logger     zerolog.Logger
+type Manager struct {
+	store Storage
 }
 
-func NewBangumiManager(home string) (*BangumiManager, error) {
-	_, err := os.Stat(home)
-	if os.IsNotExist(err) {
-		err = os.MkdirAll(home, os.ModePerm)
-		if err != nil {
-			return nil, err
-		}
-	}
-	man := BangumiManager{
-		home:       home,
-		complete:   make(map[string]Bangumi),
-		inComplete: make(map[string]Bangumi),
-		rwLock:     sync.RWMutex{},
-		logger:     utils.GetLogger("bangumiMan"),
-	}
-	return &man, man.init()
-}
-
-func (man *BangumiManager) init() error {
-	man.rwLock.Lock()
-	defer man.rwLock.Unlock()
-	return filepath.WalkDir(man.home, func(path string, d fs.DirEntry, err error) error {
-		if strings.HasSuffix(path, ".json") {
-			bz, err := os.ReadFile(path)
-			var bangumi Bangumi
-			if err == nil {
-				err = json.Unmarshal(bz, &bangumi)
-				if err == nil {
-					if bangumi.IsComplete() {
-						man.complete[bangumi.Info.Title] = bangumi
-						man.logger.Debug().Str("title", bangumi.Info.Title).Msg("load complete bangumi")
-					} else {
-						man.inComplete[bangumi.Info.Title] = bangumi
-						man.logger.Debug().Str("title", bangumi.Info.Title).Msg("load inComplete bangumi")
-					}
-				} else {
-					man.logger.Error().Err(err).Str("file", path).Msg("failed to load bangumi")
-				}
-			} else {
-				man.logger.Error().Err(err).Str("file", path).Msg("failed to load bangumi")
-			}
-		}
-		return nil
-	})
-}
-
-func (man *BangumiManager) MarkEpisodeComplete(info *BangumiInfo, seasonNum uint, episode Episode) {
-	man.rwLock.Lock()
-	defer man.rwLock.Unlock()
-	if bangumi, found := man.inComplete[info.Title]; found {
-		if season, foundSeason := bangumi.Seasons[seasonNum]; foundSeason {
-			if !season.IsComplete(episode.Number) {
-				season.Complete = append(season.Complete, episode.Number)
-				bangumi.Seasons[seasonNum] = season
-				_ = man.Flush(&bangumi)
-			}
-		}
-		if bangumi.IsComplete() {
-			delete(man.inComplete, info.Title)
-			man.complete[info.Title] = bangumi
-		} else {
-			man.inComplete[info.Title] = bangumi
-		}
+func NewManager(store Storage) *Manager {
+	return &Manager{
+		store: store,
 	}
 }
 
-func (man *BangumiManager) IterInCompleteBangumi(fn func(man *BangumiManager, bangumi *Bangumi) bool) {
-	man.rwLock.Lock()
-	defer man.rwLock.Unlock()
-	for title, bangumi := range man.inComplete {
-		result := fn(man, &bangumi)
-		man.inComplete[title] = bangumi
-		if result {
-			break
-		}
-	}
+func (m *Manager) AddDownloadHistory(resource Resource) (DownLoadHistory, error) {
+	return m.store.AddDownloadHistory(nil, resource)
 }
 
-func (man *BangumiManager) Flush(bangumi *Bangumi) error {
-	bz, err := json.MarshalIndent(bangumi, "", "    ")
+func (m *Manager) UpdateDownloadHistory(history DownLoadHistory) error {
+	ctx, err := m.store.Begin()
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(man.home, fmt.Sprintf("%s.json", bangumi.Info.Title)), bz, os.ModePerm)
+	err = m.updateDownloadHistoryInternal(ctx, history)
+	if err != nil {
+		_ = m.store.Rollback(ctx)
+		return err
+	}
+	return m.store.Commit(ctx)
+}
+
+func (m *Manager) AddBangumi(newOrUpdate Bangumi) error {
+	return m.store.AddBangumi(nil, newOrUpdate)
+}
+
+func (m *Manager) GetUnDownloadedEpisodeResources(episode Episode) ([]Resource, error) {
+	return m.store.GetUnDownloadedEpisodeResources(nil, episode)
+}
+
+func (m *Manager) ListUnDownloadedBangumis() ([]Bangumi, error) {
+	return m.store.ListUnDownloadedBangumis(nil)
+}
+
+func (m *Manager) ListDownloadedBangumis(ctx context.Context) ([]Bangumi, error) {
+	return m.store.ListDownloadedBangumis(ctx)
+}
+
+func (m *Manager) GetBgmByTitle(title string) (Bangumi, error) {
+	return m.store.GetBgmByTitle(nil, title)
+}
+
+func (m *Manager) GetBgmByTmDBId(tmdbId int64) (Bangumi, error) {
+	return m.store.GetBgmByTmDBId(nil, tmdbId)
+}
+
+func (m *Manager) GetEpisodeResourceDownloadHistories(ctx context.Context, episode Episode) ([]DownLoadHistory, error) {
+	return m.store.GetEpisodeResourceDownloadHistories(ctx, episode)
+}
+
+func (m *Manager) GetResource(ctx context.Context, hash string) (Resource, error) {
+	return m.store.GetResource(ctx, hash)
+}
+
+func (m *Manager) updateDownloadHistoryInternal(ctx context.Context, history DownLoadHistory) error {
+	if history.GetState() == Downloaded {
+		history.SetDownloadState(history.GetState(), nil)
+		resource, err := m.store.GetResource(ctx, history.GetTorrentHash())
+		if err != nil {
+			return err
+		}
+		if resource == nil {
+			return errors.Errorf("resource not found for hash %s", history.GetTorrentHash())
+		}
+		episode, err := resource.GetRefEpisode()
+		if err != nil {
+			return err
+		}
+		if episode == nil {
+			return errors.Errorf("episode not found for resource %s", history.GetTorrentHash())
+		}
+		if err := m.store.MarkEpisodeDownloaded(ctx, episode); err != nil {
+			return err
+		}
+
+		season, err := episode.GetRefSeason()
+		if err != nil {
+			return err
+		}
+
+		episodes, err := season.GetEpisodes()
+		if err != nil {
+			return err
+		}
+
+		allEpisodeDownloaded := true
+		for _, ep := range episodes {
+			if !ep.IsDownloaded() {
+				allEpisodeDownloaded = false
+			}
+		}
+		allEpisodeDownloaded = uint(len(episodes)) == season.GetEpCount() && allEpisodeDownloaded
+		if err := m.store.MarkSeasonDownloaded(ctx, season, allEpisodeDownloaded); err != nil {
+			return err
+		}
+
+		bgm, err := season.GetRefBangumi()
+		if err != nil {
+			return err
+		}
+		seasons, err := bgm.GetSeasons()
+		allSeasonDownloaded := true
+		if err != nil {
+			return err
+		}
+		for _, s := range seasons {
+			if !s.IsDownloaded() {
+				allSeasonDownloaded = false
+			}
+		}
+
+		if err := m.store.MarkBangumiDownloaded(ctx, bgm, allSeasonDownloaded); err != nil {
+			return err
+		}
+	}
+	return m.store.UpdateDownloadHistory(ctx, history)
+}
+
+func (m *Manager) GetResourceDownloadHistory(resource Resource) (DownLoadHistory, error) {
+	return m.store.GetResourceDownloadHistory(nil, resource)
 }
