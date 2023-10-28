@@ -17,7 +17,6 @@ require (
 	github.com/rs/zerolog v1.29.1
 	github.com/siku2/arigo v0.0.0-00010101000000-000000000000
 	github.com/spf13/cobra v1.7.0
-	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.3.2
 	github.com/stretchr/testify v1.8.2
 	github.com/studio-b12/gowebdav v0.0.0-20230203202212-3282f94193f2
@@ -70,6 +69,7 @@ require (
 	github.com/spf13/afero v1.1.2 // indirect
 	github.com/spf13/cast v1.3.0 // indirect
 	github.com/spf13/jwalterweatherman v1.0.0 // indirect
+	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20200815110645-5c35d600f0ca // indirect
 	go.etcd.io/bbolt v1.3.6 // indirect
 	golang.org/x/crypto v0.8.0 // indirect
