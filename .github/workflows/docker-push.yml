@@ -6,7 +6,7 @@ on:
       - "v*.*.*"
 
 jobs:
-  marginx:
+  autobangumi:
     runs-on: ubuntu-latest
     steps:
       -
