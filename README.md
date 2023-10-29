@@ -1,3 +1,4 @@
+[![Docker Images](https://github.com/lyqingye/AutoBangumi-go/actions/workflows/docker-push.yml/badge.svg?branch=master&event=release)](https://github.com/lyqingye/AutoBangumi-go/actions/workflows/docker-push.yml)
 # AutoBangumi-go
 该项目为个人使用的一个自动追番工具，其主要功能是从其它资源网站收集种子文件，通过重命名后推送给下载软件进行下载，文件通过重命名后可以直接被jellyfin直接识别  
 通过配置要看的番剧名称，实现自动追番
