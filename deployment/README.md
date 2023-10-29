@@ -70,6 +70,13 @@ Host = "http://nas.lyqingye.com:5005"
 Username = "lyqingye"
 Password = ""
 Dir = "/anime"
+
+# 该配置用于下载完成后自动扫描jellyfin的媒体库
+[Jellyfin]
+AutoScanLibraryWhenDownloadFinished = false
+Endpoint = "http://nas.lyqingye.com:8096/"
+Username = "lyqingye"
+Password = "bengbuzhule"
 ```
 
 ## bot 命令

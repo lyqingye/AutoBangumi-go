@@ -49,3 +49,9 @@ Host = "http://nas.lyqingye.com:5005"
 Username = "lyqingye"
 Password = ""
 Dir = "/anime"
+
+[Jellyfin]
+AutoScanLibraryWhenDownloadFinished = false
+Endpoint = "http://nas.lyqingye.com:8096/"
+Username = "lyqingye"
+Password = "bengbuzhule"

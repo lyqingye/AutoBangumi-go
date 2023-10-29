@@ -53,6 +53,29 @@ func (cfg Aria2Config) Validate() error {
 	return nil
 }
 
+type JellyfinConfig struct {
+	Endpoint                            string `mapstructure:"Endpoint"`
+	Username                            string `mapstructure:"Username"`
+	Password                            string `mapstructure:"Password"`
+	AutoScanLibraryWhenDownloadFinished bool   `mapstructure:"AutoScanLibraryWhenDownloadFinished"`
+}
+
+func (cfg JellyfinConfig) Validate() error {
+	if !cfg.AutoScanLibraryWhenDownloadFinished {
+		return nil
+	}
+	if _, err := url.Parse(cfg.Endpoint); err != nil {
+		return err
+	}
+	if cfg.Username == "" {
+		return errors.New("username empty")
+	}
+	if cfg.Password == "" {
+		return errors.New("password empty")
+	}
+	return nil
+}
+
 type DBConfig struct {
 	LogLevel string `mapstructure:"LogLevel"`
 
@@ -200,6 +223,7 @@ type Config struct {
 
 	TelegramBot TelegramBotConfig
 	WebDAV      WebDAVConfig
+	Jellyfin    JellyfinConfig
 }
 
 func (config *Config) Validate() error {
@@ -226,6 +250,9 @@ func (config *Config) Validate() error {
 	}
 	if err := config.WebDAV.Validate(); err != nil {
 		return errors.Wrap(err, "WebDAVConfig Validate Error")
+	}
+	if err := config.Jellyfin.Validate(); err != nil {
+		return errors.Wrap(err, "JellyfinConfig Validate Error")
 	}
 	return nil
 }
