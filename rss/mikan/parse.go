@@ -43,7 +43,7 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem) (*ParseItemResul
 		ret.Resource.TorrentPubDate = pubDate
 
 		// Parse Episode from item description webpage, result information is reliable
-		// - Title (nullable)
+		// - title (nullable)
 		// - Mikan bangumi Id (nullable)
 		// - BangumiTV subject Id (nullable)
 		// - Torrent
@@ -65,8 +65,8 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem) (*ParseItemResul
 
 		// Parse Episode from filename, result information is unreliable
 		// - BangumiTitle (nullable)
-		// - Episode Number (nullable)
-		// - SeasonNum Number (nullable)
+		// - Episode number (nullable)
+		// - SeasonNum number (nullable)
 		// - Lang (nullable)
 		// - Resolution (nullable)
 		// - ResourceType (nullable)
@@ -153,7 +153,7 @@ func (parser *MikanRSSParser) parserItemLink(item MikanRssItem) (*ParseItemResul
 			tvDetails, err := parser.searchTMDB(searchTitle)
 			if err == nil {
 				ret.TmDBId = tvDetails.ID
-				// using tmdb Title as bangumi title
+				// using tmdb title as bangumi title
 				ret.Title = tvDetails.Name
 
 				// predict season number using air date
