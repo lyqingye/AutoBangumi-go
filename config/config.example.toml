@@ -42,3 +42,10 @@ Endpoint = "https://mikanani.me"
 [TelegramBot]
 Enable = false
 Token = ""
+
+[WebDAV]
+ImportBangumiOnStartup = false
+Host = "http://nas.lyqingye.com:5005"
+Username = "lyqingye"
+Password = ""
+Dir = "/anime"

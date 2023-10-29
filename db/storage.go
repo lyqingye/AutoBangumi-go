@@ -58,8 +58,7 @@ func (b *Backend) Begin() (context.Context, error) {
 	if err := tx.Error; err != nil {
 		return nil, err
 	}
-	ctx := context.WithValue(context.Background(), ContextTxKey, tx)
-	return ctx, nil
+	return b.wrapCtx(tx), nil
 }
 
 func (b *Backend) Rollback(ctx context.Context) error {
@@ -83,20 +82,100 @@ func (b *Backend) unwrapCtx(ctx context.Context) *gorm.DB {
 	return v.(*gorm.DB)
 }
 
+func (b *Backend) wrapCtx(tx *gorm.DB) context.Context {
+	return context.WithValue(context.Background(), ContextTxKey, tx)
+}
+
 func (b *Backend) AddBangumi(ctx context.Context, newOrUpdate bangumi.Bangumi) error {
 	ptx := b.unwrapCtx(ctx)
 	tx := ptx.Begin()
 	if err := tx.Error; err != nil {
 		return err
 	}
-	if err := b.addBgm(tx, newOrUpdate); err != nil {
+	if _, err := b.addBgm(tx, newOrUpdate); err != nil {
 		tx.Rollback()
 		return err
 	}
 	return tx.Commit().Error
 }
 
-func (b *Backend) addBgm(tx *gorm.DB, bgm bangumi.Bangumi) error {
+func (b *Backend) ImportDownloadBangumi(ctx context.Context, bgm bangumi.Bangumi) error {
+	ptx := b.unwrapCtx(ctx)
+	tx := ptx.Begin()
+	if err := tx.Error; err != nil {
+		return err
+	}
+	if err := b.importDownloadBangumi(tx, bgm); err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit().Error
+}
+
+func (b *Backend) importDownloadBangumi(tx *gorm.DB, bgm bangumi.Bangumi) error {
+	addedBgm, err := b.addBgm(tx, bgm)
+	if err != nil {
+		return err
+	}
+
+	addSeasons, err := addedBgm.GetSeasons()
+	if err != nil {
+		return err
+	}
+	seasonIdMap := make(map[uint]uint)
+	for _, season := range addSeasons {
+		v := season.(*ProxyMSeason)
+		seasonIdMap[v.Number] = v.ID
+	}
+
+	if err := tx.Model(&MBangumi{}).
+		Where("title = ? or tmdb_id = ?", bgm.GetTitle(), bgm.GetTmDBId()).
+		UpdateColumn("downloaded", bgm.IsDownloaded()).
+		Error; err != nil {
+		return err
+	}
+	ctx := b.wrapCtx(tx)
+	if err = b.MarkBangumiDownloaded(ctx, addedBgm, bgm.IsDownloaded()); err != nil {
+		return err
+	}
+
+	seasons, err := bgm.GetSeasons()
+	if err != nil {
+		return err
+	}
+	for _, season := range seasons {
+		seasonId, found := seasonIdMap[season.GetNumber()]
+		if !found {
+			return errors.New("panic season id not found")
+		}
+		if season.IsDownloaded() {
+			if err = tx.Model(&MSeason{}).Where("id = ?", seasonId).
+				UpdateColumn("downloaded", true).
+				Error; err != nil {
+				return err
+			}
+		}
+
+		episodes, err := season.GetEpisodes()
+		if err != nil {
+			return err
+		}
+
+		for _, ep := range episodes {
+			if !ep.IsDownloaded() {
+				continue
+			}
+			if err = tx.Model(&MEpisode{}).Where("season_id = ? AND number = ?", seasonId, ep.GetNumber()).
+				UpdateColumn("downloaded", true).
+				Error; err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (b *Backend) addBgm(tx *gorm.DB, bgm bangumi.Bangumi) (bangumi.Bangumi, error) {
 	var err error
 
 	// 插入bangumi
@@ -105,7 +184,7 @@ func (b *Backend) addBgm(tx *gorm.DB, bgm bangumi.Bangumi) error {
 		TMDBId: bgm.GetTmDBId(),
 	}
 	if err := tx.Where("title = ? or tmdb_id = ?", bgm.GetTitle(), bgm.GetTmDBId()).FirstOrCreate(&newBgm).Error; err != nil {
-		return err
+		return nil, err
 	}
 
 	// 插入Seasons
@@ -120,7 +199,7 @@ func (b *Backend) addBgm(tx *gorm.DB, bgm bangumi.Bangumi) error {
 		}
 	}
 Exit:
-	return err
+	return Proxy(newBgm, tx), err
 }
 
 func (b *Backend) addSeason(tx *gorm.DB, bangumiId uint, season bangumi.Season) error {

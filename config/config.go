@@ -68,7 +68,7 @@ type DBConfig struct {
 	// Host address
 	Host string `mapstructure:"Host"`
 
-	// Port Number
+	// Port number
 	Port string `mapstructure:"Port"`
 
 	// MaxConns is the maximum number of connections in the pool.
@@ -157,6 +157,34 @@ type PikpakConfig struct {
 	OfflineDownloadTimeout time.Duration `mapstructure:"OfflineDownloadTimeout"`
 }
 
+type WebDAVConfig struct {
+	ImportBangumiOnStartup bool   `mapstructure:"ImportBangumiOnStartup"`
+	Host                   string `mapstructure:"Host"`
+	Username               string `mapstructure:"Username"`
+	Password               string `mapstructure:"Password"`
+	Dir                    string `mapstructure:"Dir"`
+}
+
+func (cfg WebDAVConfig) Validate() error {
+	if !cfg.ImportBangumiOnStartup {
+		return nil
+	}
+	if _, err := url.Parse(cfg.Host); err != nil {
+		return err
+	}
+
+	if cfg.Username == "" {
+		return errors.New("empty username")
+	}
+	if cfg.Password == "" {
+		return errors.New("empty password")
+	}
+	if cfg.Dir == "" {
+		return errors.New("empty dir")
+	}
+	return nil
+}
+
 type Config struct {
 	DB          DBConfig
 	Cache       CacheConfig
@@ -171,6 +199,7 @@ type Config struct {
 	Pikpak PikpakConfig
 
 	TelegramBot TelegramBotConfig
+	WebDAV      WebDAVConfig
 }
 
 func (config *Config) Validate() error {
@@ -194,6 +223,9 @@ func (config *Config) Validate() error {
 	}
 	if err := config.TelegramBot.Validate(); err != nil {
 		return errors.Wrap(err, "TelegramBotConfig Validate Error")
+	}
+	if err := config.WebDAV.Validate(); err != nil {
+		return errors.Wrap(err, "WebDAVConfig Validate Error")
 	}
 	return nil
 }

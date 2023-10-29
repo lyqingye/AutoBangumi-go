@@ -3,7 +3,9 @@ package mdb
 import (
 	"fmt"
 
+	"github.com/antlabs/strsim"
 	tmdb "github.com/cyruzin/golang-tmdb"
+	"golang.org/x/exp/maps"
 )
 
 var (
@@ -40,12 +42,19 @@ func (client *TMDBClient) SearchTVShowByKeyword(keyword string) (*tmdb.TVDetails
 		if err != nil {
 			return nil, err
 		}
+
+		resultMap := map[string]*tmdb.TVDetails{}
 		if len(searchResult.Results) > 0 {
-			tvDetails, err := client.inner.GetTVDetails(int(searchResult.Results[0].ID), opts)
-			if err == nil {
-				return tvDetails, nil
-			} else {
-				return nil, err
+			for _, rs := range searchResult.Results {
+				tvDetails, err := client.inner.GetTVDetails(int(rs.ID), opts)
+				if err != nil {
+					return nil, err
+				}
+				resultMap[tvDetails.Name] = tvDetails
+			}
+			if len(resultMap) > 0 {
+				bestMatch := strsim.FindBestMatch(keyword, maps.Keys(resultMap))
+				return resultMap[bestMatch.Match.S], nil
 			}
 		}
 	}

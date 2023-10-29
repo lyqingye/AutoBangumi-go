@@ -55,6 +55,21 @@ Endpoint = "https://mikanani.me" # mikan的域名
 [TelegramBot]
 Enable = false # 是否启用 telegram bot
 Token = "" # telegram bot 的token
+
+# 在某些情况下，你的本地可能已经有一部分番剧已经下载了，但需要补全
+# 所以可以通过启用下面的开关，程序会自动将已经下载完成的番剧同步到数据库中
+# 需要注意的时，番剧的命名格式要是规范的：
+# 猎魔人
+#  - Season 01
+#    - S01E01.mkv
+#    - S01E02.mkv
+# 该配置是从WebDAV中导入
+[WebDAV]
+ImportBangumiOnStartup = false
+Host = "http://nas.lyqingye.com:5005"
+Username = "lyqingye"
+Password = ""
+Dir = "/anime"
 ```
 
 ## bot 命令

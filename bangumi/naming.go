@@ -61,6 +61,7 @@ func DirNaming(info Bangumi, seasonNum uint) string {
 
 func ParseDirName(dirname string) (uint, error) {
 	season := strings.ReplaceAll(dirname, "SeasonNum", "")
+	season = strings.ReplaceAll(dirname, "Season", "")
 	season = strings.TrimSpace(season)
 	seasonNum, err := strconv.ParseUint(season, 10, 32)
 	return uint(seasonNum), err
@@ -111,6 +112,23 @@ func ParseEpisodeFilename(filename string) (season uint, episode uint, err error
 		episode = uint(number)
 	} else {
 		err = fmt.Errorf("faild to parse episode file name: %s", filename)
+	}
+	return
+}
+
+func ParseSeasonFilename(filename string) (season uint, err error) {
+	pattern := `(Season|SeasonNum)\s*(\d+)`
+	regex := regexp.MustCompile(pattern)
+	matches := regex.FindStringSubmatch(filename)
+	var number uint64
+	if len(matches) == 3 {
+		number, err = strconv.ParseUint(matches[2], 10, 32)
+		if err != nil {
+			return
+		}
+		season = uint(number)
+	} else {
+		err = fmt.Errorf("faild to parse season file name: %s", filename)
 	}
 	return
 }
