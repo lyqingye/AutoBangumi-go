@@ -16,6 +16,7 @@ import (
 	"autobangumi-go/downloader/aria2"
 	"autobangumi-go/downloader/pikpak"
 	"autobangumi-go/downloader/qbittorrent"
+	"autobangumi-go/jellyfin"
 	"autobangumi-go/mdb"
 	"autobangumi-go/rss/mikan"
 	"autobangumi-go/rss/mikan/cache"
@@ -39,6 +40,7 @@ type AutoBangumi struct {
 	accountStorage pikpak.AccountStorage
 	mtx            sync.Mutex
 	backend        *db.Backend
+	jellyfin       *jellyfin.Client
 }
 
 func NewAutoBangumi(config *config.Config) (*AutoBangumi, error) {
@@ -105,6 +107,14 @@ func NewAutoBangumi(config *config.Config) (*AutoBangumi, error) {
 	bot.cfg = config
 	bot.accountStorage = backend
 	bot.mtx = sync.Mutex{}
+
+	if config.Jellyfin.AutoScanLibraryWhenDownloadFinished {
+		jellyfinClient, err := jellyfin.NewClient(config.Jellyfin.Endpoint, config.Jellyfin.Username, config.Jellyfin.Password)
+		if err != nil {
+			return nil, err
+		}
+		bot.jellyfin = jellyfinClient
+	}
 
 	return &bot, nil
 }
@@ -418,4 +428,18 @@ func (ab *AutoBangumi) ScanFileSystemBangumi(fs FileSystem, bangumiName string, 
 		return nil
 	}
 	return ab.backend.ImportDownloadBangumi(nil, &bgmFromFs)
+}
+
+func (ab *AutoBangumi) OnComplete(bgm bangumi.Bangumi, seasonNum uint, epNum uint) {
+	if ab.cfg.Jellyfin.AutoScanLibraryWhenDownloadFinished && ab.jellyfin != nil {
+		err := ab.jellyfin.StartLibraryScan()
+		if err != nil {
+			ab.logger.Error().Err(err).Msg("start scan jellyfin library error")
+		} else {
+			ab.logger.Info().Msg("episode download complete! start scan jellyfin library")
+		}
+	}
+}
+
+func (bot *AutoBangumi) OnErr(err error, bgm bangumi.Bangumi, seasonNum uint, epNum uint) {
 }
