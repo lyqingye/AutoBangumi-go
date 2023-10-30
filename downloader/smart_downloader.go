@@ -187,9 +187,9 @@ func (dl *SmartDownloader) findAria2Task(bgm bangumi.Bangumi, seasonNum uint, ep
 		return false
 	})
 	if err != nil {
-		return target, err
+		return nil, err
 	}
-	return nil, nil
+	return target, nil
 }
 
 func (dl *SmartDownloader) findQBTask(resource bangumi.Resource) (*qbittorrent.Torrent, error) {
