@@ -115,6 +115,7 @@ func NewAutoBangumi(config *config.Config) (*AutoBangumi, error) {
 		}
 		bot.jellyfin = jellyfinClient
 	}
+	bot.dl.AddCallback(&bot)
 
 	return &bot, nil
 }
