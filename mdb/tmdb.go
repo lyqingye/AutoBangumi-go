@@ -50,7 +50,16 @@ func (client *TMDBClient) SearchTVShowByKeyword(keyword string) (*tmdb.TVDetails
 				if err != nil {
 					return nil, err
 				}
-				resultMap[tvDetails.Name] = tvDetails
+				isAnime := false
+				for _, genres := range tvDetails.Genres {
+					if genres.ID == 16 {
+						isAnime = true
+						break
+					}
+				}
+				if isAnime {
+					resultMap[tvDetails.Name] = tvDetails
+				}
 			}
 			if len(resultMap) > 0 {
 				bestMatch := strsim.FindBestMatch(keyword, maps.Keys(resultMap))
