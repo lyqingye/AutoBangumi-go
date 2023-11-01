@@ -12,13 +12,13 @@ type Storage interface {
 	MarkEpisodeDownloaded(ctx context.Context, episode Episode) error
 	MarkSeasonDownloaded(ctx context.Context, season Season, download bool) error
 	MarkBangumiDownloaded(ctx context.Context, bangumi Bangumi, download bool) error
-	GetUnDownloadedEpisodeResources(ctx context.Context, episode Episode) ([]Resource, error)
+	GetValidEpisodeResources(ctx context.Context, episode Episode) ([]Resource, error)
 	GetResource(ctx context.Context, hash string) (Resource, error)
-
-	AddDownloadHistory(ctx context.Context, resource Resource) (DownLoadHistory, error)
-	UpdateDownloadHistory(ctx context.Context, history DownLoadHistory) error
-	GetResourceDownloadHistory(ctx context.Context, resource Resource) (DownLoadHistory, error)
-	GetEpisodeResourceDownloadHistories(ctx context.Context, episode Episode) ([]DownLoadHistory, error)
+	UpdateDownloadHistory(ctx context.Context, history EpisodeDownLoadHistory) error
+	AddEpisodeDownloadHistory(ctx context.Context, episode Episode, resourcesId string) (EpisodeDownLoadHistory, error)
+	MarkResourceIsInvalid(ctx context.Context, resource Resource) error
+	GetEpisodeDownloadHistory(ctx context.Context, episode Episode) (EpisodeDownLoadHistory, error)
+	RemoveEpisodeDownloadHistory(ctx context.Context, episode Episode) error
 
 	Commit(ctx context.Context) error
 	Begin() (context.Context, error)

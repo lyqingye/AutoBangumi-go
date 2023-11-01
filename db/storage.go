@@ -48,7 +48,7 @@ func NewBackend(cfg config.DBConfig) (*Backend, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = db.AutoMigrate(&MBangumi{}, &MSeason{}, &MEpisode{}, &MEpisodeTorrent{}, &MDownloadHistory{}, &MAccount{})
+	err = db.AutoMigrate(&MBangumi{}, &MSeason{}, &MEpisode{}, &MEpisodeTorrent{}, &MEpisodeDownloadHistory{}, &MAccount{})
 
 	return &backend, err
 }
@@ -282,6 +282,7 @@ func (b *Backend) addResources(tx *gorm.DB, episodeId uint, resources []bangumi.
 				Bz:           newResource.GetTorrent(),
 				Resolution:   newResource.GetResolution(),
 				ResourceType: newResource.GetResourceType(),
+				Valid:        true,
 			}
 			newTorrent.SetSubtitleLang(newResource.GetSubtitleLang())
 			torrentToInsert = append(torrentToInsert, newTorrent)
@@ -330,20 +331,48 @@ func (b *Backend) ListDownloadedBangumis(ctx context.Context) ([]bangumi.Bangumi
 	return ret, nil
 }
 
-func (b *Backend) AddDownloadHistory(ctx context.Context, resource bangumi.Resource) (bangumi.DownLoadHistory, error) {
-	history := MDownloadHistory{
-		ResourceType: string(resource.GetResourceType()),
-		ResourceId:   resource.GetTorrentHash(),
+func (b *Backend) AddEpisodeDownloadHistory(ctx context.Context, episode bangumi.Episode, resourcesId string) (bangumi.EpisodeDownLoadHistory, error) {
+	actual := episode.(*ProxyEpisode)
+	history := MEpisodeDownloadHistory{
+		ResourcesIds: resourcesId,
+		EpisodeId:    actual.ID,
 		State:        string(bangumi.TryDownload),
 	}
-	if err := b.unwrapCtx(ctx).Where("resource_id = ?", resource.GetTorrentHash()).
+	if err := b.unwrapCtx(ctx).Where("episode_id = ?", actual.ID).
 		FirstOrCreate(&history).Error; err != nil {
 		return nil, err
 	}
-	return &ProxyDownloadHistory{
-		MDownloadHistory: history,
-		db:               b.db,
+	return &ProxyEpisodeDownloadHistory{
+		MEpisodeDownloadHistory: history,
+		db:                      b.db,
 	}, nil
+}
+
+func (b *Backend) MarkResourceIsInvalid(ctx context.Context, resource bangumi.Resource) error {
+	return b.unwrapCtx(ctx).Where("resource_id = ?", resource.GetTorrentHash()).
+		UpdateColumn("valid", false).Error
+}
+
+func (b *Backend) GetEpisodeDownloadHistory(ctx context.Context, episode bangumi.Episode) (bangumi.EpisodeDownLoadHistory, error) {
+	actual := episode.(*ProxyEpisode)
+	var ret MEpisodeDownloadHistory
+	tx := b.unwrapCtx(ctx)
+	err := tx.Where("episode_id = ?", actual.ID).First(&ret).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &ProxyEpisodeDownloadHistory{
+		MEpisodeDownloadHistory: ret,
+		db:                      tx,
+	}, nil
+}
+
+func (b *Backend) RemoveEpisodeDownloadHistory(ctx context.Context, episode bangumi.Episode) error {
+	actual := episode.(*ProxyEpisode)
+	return b.unwrapCtx(ctx).Delete(MEpisodeDownloadHistory{}, "episode_id = ?", actual.ID).Error
 }
 
 func (b *Backend) GetResource(ctx context.Context, hash string) (bangumi.Resource, error) {
@@ -362,51 +391,9 @@ func (b *Backend) GetResource(ctx context.Context, hash string) (bangumi.Resourc
 	}, nil
 }
 
-func (b *Backend) UpdateDownloadHistory(ctx context.Context, history bangumi.DownLoadHistory) error {
-	actual := history.(*ProxyDownloadHistory)
-	return b.unwrapCtx(ctx).Where("resource_id = ?", actual.ResourceId).UpdateColumns(&actual.MDownloadHistory).Error
-}
-
-func (b *Backend) GetResourceDownloadHistory(ctx context.Context, resource bangumi.Resource) (bangumi.DownLoadHistory, error) {
-	history := MDownloadHistory{}
-	tx := b.unwrapCtx(ctx)
-	err := tx.Where("resource_id = ?", resource.GetTorrentHash()).Take(&history).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &ProxyDownloadHistory{
-		MDownloadHistory: history,
-		db:               tx,
-	}, nil
-}
-
-func (b *Backend) GetEpisodeResourceDownloadHistories(ctx context.Context, episode bangumi.Episode) ([]bangumi.DownLoadHistory, error) {
-	tx := b.unwrapCtx(ctx)
-	resources, err := episode.GetResources()
-	if err != nil {
-		return nil, err
-	}
-	hashes := make([]string, len(resources))
-	for _, resource := range resources {
-		hashes = append(hashes, resource.GetTorrentHash())
-	}
-
-	var histories []MDownloadHistory
-	if err := tx.Where("resource_id IN ?", hashes).Order("updated_at DESC").Find(&histories).Error; err != nil {
-		return nil, err
-	}
-	var ret []bangumi.DownLoadHistory
-	for _, history := range histories {
-		copyValue := history
-		ret = append(ret, &ProxyDownloadHistory{
-			MDownloadHistory: copyValue,
-			db:               tx,
-		})
-	}
-	return ret, nil
+func (b *Backend) UpdateDownloadHistory(ctx context.Context, history bangumi.EpisodeDownLoadHistory) error {
+	actual := history.(*ProxyEpisodeDownloadHistory)
+	return b.unwrapCtx(ctx).Where("resources_ids = ?", actual.ResourcesIds).UpdateColumns(&actual.MEpisodeDownloadHistory).Error
 }
 
 func (b *Backend) MarkEpisodeDownloaded(ctx context.Context, episode bangumi.Episode) error {
@@ -424,7 +411,7 @@ func (b *Backend) MarkBangumiDownloaded(ctx context.Context, bangumi bangumi.Ban
 	return b.unwrapCtx(ctx).Model(&MBangumi{}).Where("id = ?", actual.ID).UpdateColumn("downloaded", download).Error
 }
 
-func (b *Backend) GetUnDownloadedEpisodeResources(ctx context.Context, episode bangumi.Episode) ([]bangumi.Resource, error) {
+func (b *Backend) GetValidEpisodeResources(ctx context.Context, episode bangumi.Episode) ([]bangumi.Resource, error) {
 	resources, err := episode.GetResources()
 	if err != nil {
 		return nil, err
@@ -432,26 +419,12 @@ func (b *Backend) GetUnDownloadedEpisodeResources(ctx context.Context, episode b
 	if len(resources) == 0 {
 		return nil, nil
 	}
-
-	hashes := make(map[string]bangumi.Resource, len(resources))
-	for _, res := range resources {
-		hashes[res.GetTorrentHash()] = res
-	}
-
-	var histories []MDownloadHistory
-	if err := b.unwrapCtx(ctx).Select([]string{"resource_id"}).Where("resource_id IN ?", maps.Keys(hashes)).Find(&histories).Error; err != nil {
-		return nil, err
-	}
-
-	var existsHashes []string
-	for _, exists := range histories {
-		existsHashes = append(existsHashes, exists.GetTorrentHash())
-	}
-
 	var ret []bangumi.Resource
-	for _, hash := range utils.Difference(existsHashes, maps.Keys(hashes)) {
-		res := hashes[hash]
-		ret = append(ret, res)
+	for _, resource := range resources {
+		actual := resource.(*ProxyResource)
+		if actual.Valid {
+			ret = append(ret, resource)
+		}
 	}
 	return ret, nil
 }

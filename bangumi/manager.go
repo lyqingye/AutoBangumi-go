@@ -10,17 +10,29 @@ type Manager struct {
 	store Storage
 }
 
+func (m *Manager) AddEpisodeDownloadHistory(episode Episode, resourcesId string) (EpisodeDownLoadHistory, error) {
+	return m.store.AddEpisodeDownloadHistory(nil, episode, resourcesId)
+}
+
+func (m *Manager) MarkResourceIsInvalid(resource Resource) error {
+	return m.store.MarkResourceIsInvalid(nil, resource)
+}
+
+func (m *Manager) GetEpisodeDownloadHistory(episode Episode) (EpisodeDownLoadHistory, error) {
+	return m.store.GetEpisodeDownloadHistory(nil, episode)
+}
+
+func (m *Manager) RemoveEpisodeDownloadHistory(episode Episode) error {
+	return m.store.RemoveEpisodeDownloadHistory(nil, episode)
+}
+
 func NewManager(store Storage) *Manager {
 	return &Manager{
 		store: store,
 	}
 }
 
-func (m *Manager) AddDownloadHistory(resource Resource) (DownLoadHistory, error) {
-	return m.store.AddDownloadHistory(nil, resource)
-}
-
-func (m *Manager) UpdateDownloadHistory(history DownLoadHistory) error {
+func (m *Manager) UpdateDownloadHistory(history EpisodeDownLoadHistory) error {
 	ctx, err := m.store.Begin()
 	if err != nil {
 		return err
@@ -37,8 +49,8 @@ func (m *Manager) AddBangumi(newOrUpdate Bangumi) error {
 	return m.store.AddBangumi(nil, newOrUpdate)
 }
 
-func (m *Manager) GetUnDownloadedEpisodeResources(episode Episode) ([]Resource, error) {
-	return m.store.GetUnDownloadedEpisodeResources(nil, episode)
+func (m *Manager) GetValidEpisodeResources(episode Episode) ([]Resource, error) {
+	return m.store.GetValidEpisodeResources(nil, episode)
 }
 
 func (m *Manager) ListUnDownloadedBangumis() ([]Bangumi, error) {
@@ -57,30 +69,19 @@ func (m *Manager) GetBgmByTmDBId(tmdbId int64) (Bangumi, error) {
 	return m.store.GetBgmByTmDBId(nil, tmdbId)
 }
 
-func (m *Manager) GetEpisodeResourceDownloadHistories(ctx context.Context, episode Episode) ([]DownLoadHistory, error) {
-	return m.store.GetEpisodeResourceDownloadHistories(ctx, episode)
-}
-
 func (m *Manager) GetResource(ctx context.Context, hash string) (Resource, error) {
 	return m.store.GetResource(ctx, hash)
 }
 
-func (m *Manager) updateDownloadHistoryInternal(ctx context.Context, history DownLoadHistory) error {
+func (m *Manager) updateDownloadHistoryInternal(ctx context.Context, history EpisodeDownLoadHistory) error {
 	if history.GetState() == Downloaded {
 		history.SetDownloadState(history.GetState(), nil)
-		resource, err := m.store.GetResource(ctx, history.GetTorrentHash())
-		if err != nil {
-			return err
-		}
-		if resource == nil {
-			return errors.Errorf("resource not found for hash %s", history.GetTorrentHash())
-		}
-		episode, err := resource.GetRefEpisode()
+		episode, err := history.GetRefEpisode()
 		if err != nil {
 			return err
 		}
 		if episode == nil {
-			return errors.Errorf("episode not found for resource %s", history.GetTorrentHash())
+			return errors.Errorf("episode not found for resource %s", history.GetResourcesIds())
 		}
 		if err := m.store.MarkEpisodeDownloaded(ctx, episode); err != nil {
 			return err
@@ -127,8 +128,4 @@ func (m *Manager) updateDownloadHistoryInternal(ctx context.Context, history Dow
 		}
 	}
 	return m.store.UpdateDownloadHistory(ctx, history)
-}
-
-func (m *Manager) GetResourceDownloadHistory(resource Resource) (DownLoadHistory, error) {
-	return m.store.GetResourceDownloadHistory(nil, resource)
 }

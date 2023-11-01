@@ -2,6 +2,7 @@ package bangumi
 
 import (
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -94,6 +95,11 @@ func SelectBestResource(resources []Resource) Resource {
 	return resources[0]
 }
 
+func CompareResource(a Resource, b Resource) bool {
+	return ResolutionPriority[a.GetResolution()] > ResolutionPriority[b.GetResolution()] ||
+		SubtitlePriority[getResourceBestLang(a)] > SubtitlePriority[getResourceBestLang(b)]
+}
+
 func getResourceBestLang(resource Resource) SubtitleLang {
 	langs := resource.GetSubtitleLang()
 	sort.Slice(langs, func(i, j int) bool {
@@ -118,6 +124,17 @@ type Resource interface {
 	GetResourceType() ResourceType
 }
 
+type Resources []Resource
+
+func (resources Resources) GetId() string {
+	hashes := make([]string, 0, len(resources))
+	for _, resource := range resources {
+		hashes = append(hashes, resource.GetTorrentHash())
+	}
+	sort.Strings(hashes)
+	return strings.Join(hashes, ",")
+}
+
 type Season interface {
 	GetNumber() uint
 	GetEpCount() uint
@@ -133,16 +150,16 @@ type Bangumi interface {
 	IsDownloaded() bool
 }
 
-type DownLoadHistory interface {
+type EpisodeDownLoadHistory interface {
 	GetState() DownloadState
 	GetDownloader() Downloader
 	GetDownloaderContext() string
 	GetErrMsg() string
-	GetTorrent() []byte
-	GetTorrentHash() string
+	GetResourcesIds() string
 	GetRetryCount() int64
 	IncRetryCount()
 	SetDownloader(downloader Downloader, context string, downloadState DownloadState, error error)
 	SetDownloadState(downloadState DownloadState, error error)
 	LastUpdatedTime() time.Time
+	GetRefEpisode() (Episode, error)
 }
