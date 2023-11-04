@@ -21,7 +21,7 @@ type TestBackendSuite struct {
 }
 
 func (suite *TestBackendSuite) SetupTest() {
-	cfg, err := config.Load("../config/config.example.toml")
+	cfg, err := config.Load("../config/config.debug.toml")
 	suite.Require().NoError(err)
 	suite.Require().NotNil(cfg)
 
@@ -139,16 +139,11 @@ func (suite *TestBackendSuite) TestBasic() {
 		suite.NotNil(episodes)
 		for _, episode := range episodes {
 			suite.NoError(suite.backend.MarkEpisodeDownloaded(nil, episode))
-			res, err := episode.GetResources()
+			_, err := episode.GetResources()
 			suite.NoError(err)
-			resources, err := suite.backend.GetUnDownloadedEpisodeResources(nil, episode)
+			resources, err := suite.backend.GetValidEpisodeResources(nil, episode)
 			suite.NoError(err)
 			suite.NotNil(resources)
-			history, err := suite.backend.AddDownloadHistory(nil, res[0])
-			suite.NoError(err)
-			suite.NotNil(history)
-			history.SetDownloader(bangumi.QBDownloader, "", bangumi.Downloaded, nil)
-			suite.NoError(suite.backend.UpdateDownloadHistory(nil, history))
 		}
 		suite.NoError(suite.backend.MarkSeasonDownloaded(nil, season, true))
 	}
@@ -219,18 +214,35 @@ func (suite *TestBackendSuite) TestPikpakAccounts() {
 }
 
 func (suite *TestBackendSuite) TestDownloadHistory() {
-	history, err := suite.backend.AddDownloadHistory(nil, &db.MEpisodeTorrent{
-		ID:           0,
-		TorrentHash:  "hash1",
-		EpisodeId:    0,
-		FileIndexes:  "",
-		Bz:           nil,
-		SubtitleLang: "",
-		Resolution:   "",
-		ResourceType: "",
+	suite.TestBasic()
+	err := suite.backend.ListBangumis(nil, func(bgm bangumi.Bangumi) bool {
+		seasons, err := bgm.GetSeasons()
+		suite.Require().NoError(err)
+		for _, season := range seasons {
+			episodes, err := season.GetEpisodes()
+			suite.Require().NoError(err)
+			for _, episode := range episodes {
+				resources, err := episode.GetResources()
+				if len(resources) == 0 {
+					continue
+				}
+				suite.Require().NoError(err)
+				history, err := suite.backend.AddEpisodeDownloadHistory(nil, episode, resources[0].GetTorrentHash())
+				suite.Require().NoError(err)
+				suite.Require().NotNil(history)
+
+				history.SetDownloader(bangumi.PikpakDownloader, "", bangumi.TryDownload, nil)
+				suite.Require().NoError(suite.backend.UpdateDownloadHistory(nil, history))
+				suite.Require().NoError(suite.backend.RemoveEpisodeDownloadHistory(nil, episode))
+
+				nullHistory, err := suite.backend.GetEpisodeDownloadHistory(nil, episode)
+				suite.Require().NoError(err)
+				suite.Require().Nil(nullHistory)
+
+			}
+		}
+		return true
+
 	})
 	suite.Require().NoError(err)
-	suite.Require().NotNil(history)
-	history.SetDownloader(bangumi.PikpakDownloader, "", bangumi.TryDownload, nil)
-	suite.Require().NoError(suite.backend.UpdateDownloadHistory(nil, history))
 }

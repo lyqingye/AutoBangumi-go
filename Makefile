@@ -1,5 +1,5 @@
 IMAGE_NAME := ghcr.io/lyqingye/autobangumi-go
-TAG := v2.0.0
+TAG := latest
 BINARY_NAME := autobangumi-go
 OUTPUT_DIR := ./build/bin
 

@@ -105,7 +105,8 @@ make stop-local-deploy
 - aria2
 - aria2 webUI
 ```bash
-RPC端口： 6880
+RPC端口： 6800
+WEBUI: http://localhost:6880/
 RPCSecret: 123456
 ```
 - qbittorrent

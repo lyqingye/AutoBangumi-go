@@ -31,6 +31,8 @@ type File struct {
 	RefAcc      string
 }
 
+type Files []*File
+
 type Account struct {
 	Username       string
 	Password       string
@@ -75,7 +77,7 @@ func NewPool(storage AccountStorage, cfg config.PikpakConfig) (*Pool, error) {
 	return &pool, nil
 }
 
-func (pool *Pool) OfflineDownAndWait(name, magnet string) ([]*File, error) {
+func (pool *Pool) OfflineDownAndWait(name, magnet string) (Files, error) {
 	pool.lock.Lock()
 	pool.logger.Info().Str("name", name).Msg("try to add offline task")
 
@@ -159,6 +161,8 @@ Retry:
 		_ = client.OfflineRemove([]string{task.ID}, true)
 		pool.logger.Error().Str("name", name).Str("detail", finishedTask.Message).Msg("offline task error")
 		return nil, fmt.Errorf("offline task error: %s", finishedTask.Message)
+	} else {
+		_ = client.OfflineRemove([]string{task.ID}, false)
 	}
 
 	pool.logger.Info().Str("name", name).Msg("offline task success")

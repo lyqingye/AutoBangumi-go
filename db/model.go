@@ -73,6 +73,7 @@ type MEpisodeTorrent struct {
 	SubtitleLang string
 	Resolution   bangumi.Resolution
 	ResourceType bangumi.ResourceType
+	Valid        bool `gorm:"default:true"`
 }
 
 func (t *MEpisodeTorrent) GetTorrent() []byte {
@@ -140,10 +141,10 @@ const (
 	DownloadStateError       = "error"
 )
 
-type MDownloadHistory struct {
-	ResourceId   string `gorm:"primarykey"` // ref MTorrent Table
+type MEpisodeDownloadHistory struct {
+	EpisodeId    uint `gorm:"primarykey"`
+	ResourcesIds string
 	Downloader   string
-	ResourceType string // ref ResourceTypeTorrent | ResourceTypeHttpLink | ResourceTypeMagnet
 	Context      string // json value use by downloader
 	State        string `gorm:"index:episode_index"` // ref DownloadStateFinished | DownloadStateDownloading | DownloadStateError
 	ErrorMsg     string
@@ -152,52 +153,54 @@ type MDownloadHistory struct {
 	UpdatedAt    time.Time
 }
 
-func (history *MDownloadHistory) GetState() bangumi.DownloadState {
+func (history *MEpisodeDownloadHistory) GetState() bangumi.DownloadState {
 	return bangumi.DownloadState(history.State)
 }
 
-func (history *MDownloadHistory) GetDownloader() bangumi.Downloader {
+func (history *MEpisodeDownloadHistory) GetDownloader() bangumi.Downloader {
 	return bangumi.Downloader(history.Downloader)
 }
 
-func (history *MDownloadHistory) GetDownloaderContext() string {
+func (history *MEpisodeDownloadHistory) GetDownloaderContext() string {
 	return history.Context
 }
 
-func (history *MDownloadHistory) GetErrMsg() string {
+func (history *MEpisodeDownloadHistory) GetErrMsg() string {
 	return history.ErrorMsg
 }
 
-func (history *MDownloadHistory) GetTorrent() []byte {
-	panic("unsupported")
+func (history *MEpisodeDownloadHistory) GetResourcesIds() string {
+	return history.ResourcesIds
 }
 
-func (history *MDownloadHistory) GetTorrentHash() string {
-	return history.ResourceId
-}
-
-func (history *MDownloadHistory) GetRetryCount() int64 {
+func (history *MEpisodeDownloadHistory) GetRetryCount() int64 {
 	return history.RetryCount
 }
 
-func (history *MDownloadHistory) IncRetryCount() {
+func (history *MEpisodeDownloadHistory) IncRetryCount() {
 	history.RetryCount = history.RetryCount + 1
 }
 
-func (history *MDownloadHistory) SetDownloader(downloader bangumi.Downloader, context string, downloadState bangumi.DownloadState, error error) {
+func (history *MEpisodeDownloadHistory) SetDownloader(downloader bangumi.Downloader, context string, downloadState bangumi.DownloadState, error error) {
 	history.Downloader = string(downloader)
 	history.Context = context
 	history.State = string(downloadState)
 	history.ErrorMsg = error.Error()
 }
 
-func (history *MDownloadHistory) SetDownloadState(downloadState bangumi.DownloadState, error error) {
+func (history *MEpisodeDownloadHistory) SetDownloadState(downloadState bangumi.DownloadState, error error) {
 	history.State = string(downloadState)
-	history.ErrorMsg = error.Error()
+	if error != nil {
+		history.ErrorMsg = error.Error()
+	}
 }
 
-func (history *MDownloadHistory) LastUpdatedTime() time.Time {
+func (history *MEpisodeDownloadHistory) LastUpdatedTime() time.Time {
 	return history.UpdatedAt
+}
+
+func (history *MEpisodeDownloadHistory) GetRefEpisode() (bangumi.Episode, error) {
+	panic("unsupported")
 }
 
 type MAccount struct {

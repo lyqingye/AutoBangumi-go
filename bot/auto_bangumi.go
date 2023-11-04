@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -21,7 +20,6 @@ import (
 	"autobangumi-go/rss/mikan"
 	"autobangumi-go/rss/mikan/cache"
 	"autobangumi-go/utils"
-	pikpakgo "github.com/lyqingye/pikpak-go"
 	"github.com/nssteinbrenner/anitogo"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -273,65 +271,30 @@ func (ab *AutoBangumi) completeBangumi(bgm bangumi.Bangumi) error {
 			if ep.IsDownloaded() {
 				continue
 			}
-			dlHistories, err := ab.bgmMan.GetEpisodeResourceDownloadHistories(nil, ep)
-			if err != nil {
-				return err
-			}
-			needDownload := true
-			var downloadingResource bangumi.Resource
-			for _, history := range dlHistories {
-				switch history.GetState() {
-				case bangumi.TryDownload, bangumi.Downloading, bangumi.Downloaded:
-					downloadingResource, err = ab.bgmMan.GetResource(nil, history.GetTorrentHash())
-					if err != nil {
-						return err
-					}
-					needDownload = false
-					break
-				case bangumi.DownloadErr:
-					needDownload = false
-					// 如果是超时，那就没必要重试了。。。
-					if !strings.Contains(history.GetErrMsg(), pikpakgo.ErrWaitForOfflineDownloadTimeout.Error()) {
-						// 可以选择重试
-						downloadingResource, err = ab.bgmMan.GetResource(nil, history.GetTorrentHash())
-						if err != nil {
-							return err
-						}
-					}
-					break
+			copyEp := ep
+			go func() {
+				if err := ab.downloadSingleEpisode(ab.logger, bgm, season, copyEp); err != nil {
+					ab.logger.Error().Err(err).Msg("download episode error")
 				}
-
-				if !needDownload {
-					break
-				}
-			}
-			if needDownload {
-				resources, err := ab.bgmMan.GetUnDownloadedEpisodeResources(ep)
-				if err != nil {
-					return err
-				}
-
-				if len(resources) == 0 {
-					continue
-				}
-
-				resourceToDownload := bangumi.SelectBestResource(resources)
-				if resourceToDownload == nil {
-					continue
-				}
-				err = ab.dl.DownloadEpisode(bgm, season.GetNumber(), ep.GetNumber(), resourceToDownload)
-				if err != nil {
-					ab.logger.Error().Err(err).Msg("download episode")
-				}
-			} else if downloadingResource != nil {
-				err = ab.dl.DownloadEpisode(bgm, season.GetNumber(), ep.GetNumber(), downloadingResource)
-				if err != nil {
-					ab.logger.Error().Err(err).Msg("attach downloading episode")
-				}
-			}
+			}()
 		}
 	}
 	return nil
+}
+
+func (ab *AutoBangumi) downloadSingleEpisode(l zerolog.Logger, bgm bangumi.Bangumi, season bangumi.Season, ep bangumi.Episode) error {
+	if ep.IsDownloaded() {
+		return nil
+	}
+	resources, err := ab.bgmMan.GetValidEpisodeResources(ep)
+	if err != nil {
+		return err
+	}
+	if len(resources) == 0 {
+		l.Warn().Msg("episode no available resources to download")
+		return nil
+	}
+	return ab.dl.DownloadEpisode(bgm, season, ep, resources)
 }
 
 func (ab *AutoBangumi) getParser(cacheKey string) (*mikan.MikanRSSParser, error) {
@@ -425,7 +388,7 @@ func (ab *AutoBangumi) ScanFileSystemBangumi(fs FileSystem, bangumiName string, 
 		return err
 	}
 
-	if bgmFromFs.IsDownloaded() {
+	if bgmFromFs.IsDownloaded() && len(bgmFromFs.seasons) == len(seasonEpCount) {
 		return nil
 	}
 	return ab.backend.ImportDownloadBangumi(nil, &bgmFromFs)

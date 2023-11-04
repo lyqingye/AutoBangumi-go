@@ -63,13 +63,16 @@ services:
 
   autobangumi:
     container_name: auto-bangumi
-    image: ghcr.io/lyqingye/autobangumi-go
+    image: ghcr.io/lyqingye/autobangumi-go:latest
     command:
       - "--config"
       - "/config/config.local.toml"
     volumes:
       - ./config.local.toml:/config/config.local.toml
       - ./cache:/cache
+    environment:
+      - PUID=1000
+      - PGID=1000
     restart: unless-stopped
     depends_on:
       - aria2
