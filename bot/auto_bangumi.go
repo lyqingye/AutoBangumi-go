@@ -36,9 +36,10 @@ type AutoBangumi struct {
 	ticker         *time.Ticker
 	cfg            *config.Config
 	accountStorage pikpak.AccountStorage
-	mtx            sync.Mutex
 	backend        *db.Backend
 	jellyfin       *jellyfin.Client
+	mtx            sync.Mutex
+	bgmMtx         map[int64]*sync.Mutex
 }
 
 func NewAutoBangumi(config *config.Config) (*AutoBangumi, error) {
@@ -105,6 +106,7 @@ func NewAutoBangumi(config *config.Config) (*AutoBangumi, error) {
 	bot.cfg = config
 	bot.accountStorage = backend
 	bot.mtx = sync.Mutex{}
+	bot.bgmMtx = make(map[int64]*sync.Mutex)
 
 	if config.Jellyfin.AutoScanLibraryWhenDownloadFinished {
 		jellyfinClient, err := jellyfin.NewClient(config.Jellyfin.Endpoint, config.Jellyfin.Username, config.Jellyfin.Password)
@@ -239,22 +241,37 @@ func (ab *AutoBangumi) tick() error {
 			err = ab.bgmMan.AddBangumi(updatedBgm)
 			if err != nil {
 				logger.Error().Err(err).Msg("insert bangumi to storage error")
+			} else {
+				if err := ab.completeBangumi(copyBgm); err != nil {
+					ab.logger.Error().Err(err).Msg("complete bangumi error")
+				}
 			}
 		}()
 	}
 	wg.Wait()
-
-	for _, bgm := range bangumis {
-		if err := ab.completeBangumi(bgm); err != nil {
-			ab.logger.Error().Err(err).Msg("complete bangumi error")
-		}
-	}
 	return nil
 }
 
-func (ab *AutoBangumi) completeBangumi(bgm bangumi.Bangumi) error {
+func (ab *AutoBangumi) getBgmLock(bgm bangumi.Bangumi) *sync.Mutex {
 	ab.mtx.Lock()
 	defer ab.mtx.Unlock()
+	lock, found := ab.bgmMtx[bgm.GetTmDBId()]
+	if found {
+		return lock
+	}
+	newLock := new(sync.Mutex)
+	ab.bgmMtx[bgm.GetTmDBId()] = newLock
+	return newLock
+}
+
+func (ab *AutoBangumi) completeBangumi(bgm bangumi.Bangumi) error {
+	lock := ab.getBgmLock(bgm)
+	lock.Lock()
+	if lock.TryLock() {
+		defer lock.Unlock()
+	} else {
+		return nil
+	}
 	seasons, err := bgm.GetSeasons()
 	if err != nil {
 		return err
