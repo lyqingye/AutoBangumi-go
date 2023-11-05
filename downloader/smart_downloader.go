@@ -138,8 +138,11 @@ func (dl *SmartDownloader) getLock(bgm bangumi.Bangumi, season bangumi.Season, e
 
 func (dl *SmartDownloader) DownloadEpisode(bgm bangumi.Bangumi, season bangumi.Season, ep bangumi.Episode, resources bangumi.Resources) error {
 	lock := dl.getLock(bgm, season, ep)
-	lock.Lock()
-	defer lock.Unlock()
+	if lock.TryLock() {
+		defer lock.Unlock()
+	} else {
+		return nil
+	}
 
 	l := dl.logger.With().Str("title", bgm.GetTitle()).Uint("season", season.GetNumber()).Uint("episode", ep.GetNumber()).Logger()
 	attached, err := dl.attachDownloadingEpisode(l, bgm, season, ep, resources)
@@ -163,6 +166,10 @@ func (dl *SmartDownloader) DownloadEpisode(bgm bangumi.Bangumi, season bangumi.S
 			return err
 		}
 	} else {
+		if len(gids) == 0 {
+			history.SetDownloader(bangumi.PikpakDownloader, "", bangumi.DownloadErr, errors.New("empty files"))
+			return dl.dhs.UpdateDownloadHistory(history)
+		}
 		go dl.waitAria2DownloadComplete(l, gids, bgm, season.GetNumber(), ep.GetNumber(), history)
 
 		ctx := utils.MustToJson(PikpakDownloaderContext{gids})
