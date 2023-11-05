@@ -13,7 +13,6 @@ type Storage interface {
 	MarkSeasonDownloaded(ctx context.Context, season Season, download bool) error
 	MarkBangumiDownloaded(ctx context.Context, bangumi Bangumi, download bool) error
 	GetValidEpisodeResources(ctx context.Context, episode Episode) ([]Resource, error)
-	GetResource(ctx context.Context, hash string) (Resource, error)
 	UpdateDownloadHistory(ctx context.Context, history EpisodeDownLoadHistory) error
 	AddEpisodeDownloadHistory(ctx context.Context, episode Episode, resourcesId string) (EpisodeDownLoadHistory, error)
 	MarkResourceIsInvalid(ctx context.Context, resource Resource) error

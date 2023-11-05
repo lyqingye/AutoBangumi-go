@@ -349,7 +349,7 @@ func (b *Backend) AddEpisodeDownloadHistory(ctx context.Context, episode bangumi
 }
 
 func (b *Backend) MarkResourceIsInvalid(ctx context.Context, resource bangumi.Resource) error {
-	return b.unwrapCtx(ctx).Where("resource_id = ?", resource.GetTorrentHash()).
+	return b.unwrapCtx(ctx).Where("torrent_hash = ?", resource.GetTorrentHash()).
 		UpdateColumn("valid", false).Error
 }
 
@@ -375,25 +375,9 @@ func (b *Backend) RemoveEpisodeDownloadHistory(ctx context.Context, episode bang
 	return b.unwrapCtx(ctx).Delete(MEpisodeDownloadHistory{}, "episode_id = ?", actual.ID).Error
 }
 
-func (b *Backend) GetResource(ctx context.Context, hash string) (bangumi.Resource, error) {
-	tx := b.unwrapCtx(ctx)
-	var ret MEpisodeTorrent
-	err := tx.Select([]string{"id", "episode_id", "torrent_hash", "file_indexes", "subtitle_lang", "resolution", "resource_type"}).Where("torrent_hash", hash).Find(&ret).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &ProxyResource{
-		MEpisodeTorrent: ret,
-		db:              tx,
-	}, nil
-}
-
 func (b *Backend) UpdateDownloadHistory(ctx context.Context, history bangumi.EpisodeDownLoadHistory) error {
 	actual := history.(*ProxyEpisodeDownloadHistory)
-	return b.unwrapCtx(ctx).Where("resources_ids = ?", actual.ResourcesIds).UpdateColumns(&actual.MEpisodeDownloadHistory).Error
+	return b.unwrapCtx(ctx).Where("episode_id = ?", actual.EpisodeId).UpdateColumns(&actual.MEpisodeDownloadHistory).Error
 }
 
 func (b *Backend) MarkEpisodeDownloaded(ctx context.Context, episode bangumi.Episode) error {
