@@ -69,10 +69,6 @@ func (m *Manager) GetBgmByTmDBId(tmdbId int64) (Bangumi, error) {
 	return m.store.GetBgmByTmDBId(nil, tmdbId)
 }
 
-func (m *Manager) GetResource(ctx context.Context, hash string) (Resource, error) {
-	return m.store.GetResource(ctx, hash)
-}
-
 func (m *Manager) updateDownloadHistoryInternal(ctx context.Context, history EpisodeDownLoadHistory) error {
 	if history.GetState() == Downloaded {
 		history.SetDownloadState(history.GetState(), nil)
