@@ -266,7 +266,6 @@ func (ab *AutoBangumi) getBgmLock(bgm bangumi.Bangumi) *sync.Mutex {
 
 func (ab *AutoBangumi) completeBangumi(bgm bangumi.Bangumi) error {
 	lock := ab.getBgmLock(bgm)
-	lock.Lock()
 	if lock.TryLock() {
 		defer lock.Unlock()
 	} else {
