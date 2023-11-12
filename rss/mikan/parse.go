@@ -456,6 +456,7 @@ func (parser *MikanRSSParser) parseMikanRSS(mikan *MikanRss) ([]*Bangumi, error)
 		}
 		episode.Resources = append(episode.Resources, pr.Resource)
 		season.Episodes[pr.EpNum] = episode
+		season.RemoveInvalidEpisode()
 		bgm.Seasons[pr.SeasonNum] = season
 
 		bangumiMap[pr.SubjectId] = bgm

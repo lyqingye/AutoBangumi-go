@@ -18,6 +18,7 @@ type Storage interface {
 	MarkResourceIsInvalid(ctx context.Context, resource Resource) error
 	GetEpisodeDownloadHistory(ctx context.Context, episode Episode) (EpisodeDownLoadHistory, error)
 	RemoveEpisodeDownloadHistory(ctx context.Context, episode Episode) error
+	RemoveBangumi(title string) error
 
 	Commit(ctx context.Context) error
 	Begin() (context.Context, error)

@@ -26,6 +26,10 @@ func (m *Manager) RemoveEpisodeDownloadHistory(episode Episode) error {
 	return m.store.RemoveEpisodeDownloadHistory(nil, episode)
 }
 
+func (m *Manager) RemoveBangumi(title string) error {
+	return m.store.RemoveBangumi(title)
+}
+
 func NewManager(store Storage) *Manager {
 	return &Manager{
 		store: store,

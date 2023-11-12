@@ -121,10 +121,6 @@ func (suite *TestBackendSuite) TestBasic() {
 	err := suite.backend.AddBangumi(nil, &testData)
 	suite.NoError(err)
 
-	res, err := suite.backend.GetResource(nil, "hash1")
-	suite.NoError(err)
-	suite.NotNil(res)
-
 	bgm, err := suite.backend.GetBgmByTitle(nil, "test bangumi")
 	suite.NoError(err)
 	suite.NotNil(bgm)

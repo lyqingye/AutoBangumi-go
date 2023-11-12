@@ -119,6 +119,14 @@ func (s *Season) IsDownloaded() bool {
 	panic("unsupported")
 }
 
+func (s *Season) RemoveInvalidEpisode() {
+	for k, ep := range s.Episodes {
+		if ep.GetNumber() > s.GetEpCount() {
+			delete(s.Episodes, k)
+		}
+	}
+}
+
 type BangumiInfo struct {
 	Title   string
 	TmDBId  int64
