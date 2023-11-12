@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -12,6 +11,7 @@ import (
 	"autobangumi-go/config"
 	"autobangumi-go/downloader/pikpak"
 	"autobangumi-go/utils"
+	"github.com/pkg/errors"
 	"golang.org/x/exp/maps"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -411,6 +411,66 @@ func (b *Backend) GetValidEpisodeResources(ctx context.Context, episode bangumi.
 		}
 	}
 	return ret, nil
+}
+
+func (b *Backend) RemoveBangumi(title string) error {
+	tx := b.db.Begin()
+
+	bgm, err := b.getBgmByTitle(tx, title)
+	if err != nil {
+		return err
+	}
+	if bgm == nil {
+		return errors.Errorf("bangumi: %s not found", title)
+	}
+	seasons, err := bgm.GetSeasons()
+	if err != nil {
+		return err
+	}
+	for _, season := range seasons {
+		episodes, err := season.GetEpisodes()
+		if err != nil {
+			return err
+		}
+
+		for _, episode := range episodes {
+			resources, err := episode.GetResources()
+			if err != nil {
+				return err
+			}
+			for _, resource := range resources {
+				// Delete resource records
+				actual := resource.(*ProxyResource)
+				if err := tx.Delete(MEpisodeTorrent{}, "id = ?", actual.ID).Error; err != nil {
+					tx.Rollback()
+					return err
+				}
+			}
+
+			actual := episode.(*ProxyEpisode)
+			if err := tx.Delete(MEpisode{}, "id = ?", actual.ID).Error; err != nil {
+				tx.Rollback()
+				return err
+			}
+			if err := tx.Delete(MEpisodeDownloadHistory{}, "episode_id = ?", actual.ID).Error; err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
+
+		actual := season.(*ProxyMSeason)
+		if err := tx.Delete(MSeason{}, "id = ?", actual.ID).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	actual := bgm.(*ProxyMBangumi)
+	if err := tx.Delete(MBangumi{}, "id = ?", actual.ID).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
 }
 
 func (b *Backend) getBgmByTitle(tx *gorm.DB, title string) (bangumi.Bangumi, error) {

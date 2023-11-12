@@ -156,6 +156,10 @@ func (ab *AutoBangumi) AddBangumi(title string, tmdbID int64) (bangumi.Bangumi, 
 	return searchResult, nil
 }
 
+func (ab *AutoBangumi) RemoveBangumi(title string) error {
+	return ab.bgmMan.RemoveBangumi(title)
+}
+
 func (ab *AutoBangumi) Start() {
 	ab.logger.Info().Msg("starting auto bangumi ab")
 	ab.scanBangumis()

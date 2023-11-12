@@ -56,7 +56,7 @@ var (
 )
 
 func DirNaming(info Bangumi, seasonNum uint) string {
-	return filepath.Join(info.GetTitle(), fmt.Sprintf("SeasonNum %02d", seasonNum))
+	return filepath.Join(info.GetTitle(), fmt.Sprintf("Season %02d", seasonNum))
 }
 
 func ParseDirName(dirname string) (uint, error) {

@@ -1,0 +1,57 @@
+[DB]
+Host = "nas.lyqingye.com"
+Port = "9004"
+User = "postgres"
+Password = "123456"
+Name = "auto_bangumi"
+MaxConns = 20
+LogLevel = "info"
+
+[QB]
+Enable = false
+Endpoint = "http://nas.lyqingye.com:8888"
+Username = "admin"
+Password = "adminadmin"
+DownloadDir = "/anime"
+
+[Aria2]
+WsUrl = "ws://nas.lyqingye.com:9000/jsonrpc"
+Secret = "123456"
+DownloadDir = "/anime"
+
+[Pikpak]
+OfflineDownloadTimeout = "2m"
+
+[AutoBangumi]
+BangumiCompleteInterval = "30m"
+RssRefreshInterval = "5m"
+
+[TMDB]
+Token = "702225c8ca516a5be2f062988438bfda"
+
+[Cache]
+CacheDir = "/cache"
+ClearCacheInterval = "24h"
+
+[BangumiTV]
+Endpoint = "https://api.bgm.tv/v0"
+
+[Mikan]
+Endpoint = "https://mikanani.me"
+
+[TelegramBot]
+Enable = true
+Token = "6116857194:AAGfkVrqVqoSngeFYqeRrS5TWXccKBFAzkM"
+
+[WebDAV]
+ImportBangumiOnStartup = false
+Host = "http://nas.lyqingye.com:5005"
+Username = "lyqingye"
+Password = "WOAIxiaokeai.1314"
+Dir = "/anime"
+
+[Jellyfin]
+AutoScanLibraryWhenDownloadFinished = true
+Endpoint = "http://nas.lyqingye.com:8096/"
+Username = "autobangumi"
+Password = "123456"

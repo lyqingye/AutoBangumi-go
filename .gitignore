@@ -9,3 +9,4 @@ pikpak.json
 ./deployment/qb
 ./deployment/aria2
 ./deployment/db_data
+config/config.remote.toml

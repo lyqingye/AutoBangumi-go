@@ -126,6 +126,8 @@ RemoveDownloadHistory:
 }
 
 func (dl *SmartDownloader) getLock(bgm bangumi.Bangumi, season bangumi.Season, ep bangumi.Episode) *sync.Mutex {
+	dl.mtx.Lock()
+	defer dl.mtx.Unlock()
 	key := fmt.Sprintf("%d-%d-%d", bgm.GetTmDBId(), season.GetNumber(), ep.GetNumber())
 	lock, found := dl.episodeMtx[key]
 	if found {
@@ -240,7 +242,7 @@ func (dl *SmartDownloader) batchDownloadUsingPikpakAndAria2(l zerolog.Logger, bg
 				l.Error().Err(err).Msg("pikpak download error")
 				if errors.Is(err, pikpakgo.ErrWaitForOfflineDownloadTimeout) {
 					if dbErr := dl.dhs.MarkResourceIsInvalid(copyResource); dbErr != nil {
-						l.Error().Err(err).Msg("mark resource invalid error")
+						l.Error().Err(dbErr).Msg("mark resource invalid error")
 					}
 				}
 				return
