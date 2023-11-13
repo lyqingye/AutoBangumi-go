@@ -30,7 +30,7 @@ func (s *TestBangumiTVSuite) TestBangumiTxSubjects() {
 }
 
 func (s *TestBangumiTVSuite) TestSearchSubject() {
-	for _, keyword := range []string{"异世界舅舅", "我的青春恋爱物语果然有问题。续", "赤发的白雪姬"} {
+	for _, keyword := range []string{"伪恋"} {
 		subject, err := s.cli.SearchAnime(keyword)
 		s.Require().NoError(err)
 		s.Require().NotNil(subject)

@@ -217,8 +217,15 @@ func (client *BangumiTVClient) SearchAnime2(keyword string) (*Subjects, error) {
 		}
 
 		subjects = append(subjects, item)
-		names = append(names, item.Name)
-		names = append(names, item.NameCn)
+		if len(item.Name) != 0 {
+			names = append(names, item.Name)
+		}
+		if len(item.NameCn) != 0 {
+			names = append(names, item.NameCn)
+		}
+	}
+	if len(names) == 0 {
+		return nil, fmt.Errorf("bangumi tv search result is empty")
 	}
 	matchResult := strsim.FindBestMatch(keyword, names)
 
