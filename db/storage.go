@@ -349,7 +349,7 @@ func (b *Backend) AddEpisodeDownloadHistory(ctx context.Context, episode bangumi
 }
 
 func (b *Backend) MarkResourceIsInvalid(ctx context.Context, resource bangumi.Resource) error {
-	return b.unwrapCtx(ctx).Where("torrent_hash = ?", resource.GetTorrentHash()).
+	return b.unwrapCtx(ctx).Model(&MEpisodeTorrent{}).Where("torrent_hash = ?", resource.GetTorrentHash()).
 		UpdateColumn("valid", false).Error
 }
 
